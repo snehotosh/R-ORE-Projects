@@ -1,7 +1,6 @@
 #################################################################
-## Churn Prediction Library for BIW Offering
+## Churn Prediction Library
 ## This is a final version of Decision Tree
-## Done by Snehotosh
 #################################################################
 if(nrow(ore.scriptList(name = "ore.churn.DT")) > 0)
 {
