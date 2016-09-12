@@ -1,7 +1,6 @@
 #################################################################
-## Churn Prediction Library for BIW Offering
+## Churn Prediction Library
 ## This is a final version
-## Done by Snehotosh
 #################################################################
 
 if(nrow(ore.scriptList(name = "ore.churn.desc_stat")) > 0)
