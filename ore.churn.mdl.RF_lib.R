@@ -1,7 +1,6 @@
 #################################################################
-## Churn Prediction Library for BIW Offering
+## Churn Prediction Library
 ## This is a final version of RandomForest
-## Done by Snehotosh
 #################################################################
 
 if(nrow(ore.scriptList(name = "ore.churn.RF")) > 0)
