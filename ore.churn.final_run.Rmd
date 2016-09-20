@@ -61,18 +61,30 @@ destFolder <- '/u01/rworkspace/ssiout'
 source("/u01/rworkspace/ssiinitiative/ore.churn.desc.stat_lib.R")
 
 # --- Run Descriptive Stats (TESTED FINE)
-skewness_kurtosis_DF <- ore.doEval( FUN.NAME = "ore.churn.desc_stat",FUN.OWNER = "RQUSER",
-            dataset = CHURN,
-            Y = resVar,
-            imputeType = 'knn',
-            displaycols = P_HIST_BP_COLS,
-            destLoc = destFolder,
-            boxplot_halign = FALSE,
-            ore.connect=TRUE
-            )
+skewness_kurtosis_DF <- ore.pull(ore.doEval( FUN.NAME = "ore.churn.desc_stat",
+                                             FUN.OWNER = "RQUSER",
+                                             dataset = CHURN,
+                                             Y = resVar,
+                                             imputeType = 'knn',
+                                             displaycols = P_HIST_BP_COLS,
+                                             destLoc = destFolder,
+                                             boxplot_halign = FALSE,
+                                             ore.connect=TRUE),
+                                 graphics = TRUE)
 
-# Display
-skewness_kurtosis_DF
+
+# Display the Skewness and Kurtosis dataframe
+skewness_kurtosis_DF$dat
+
+# All Images
+library(png)
+library(grid)
+
+for(i in 1:length(skewness_kurtosis_DF$img))
+{
+  grid.newpage()
+  grid.raster(as.raster(readPNG(skewness_kurtosis_DF$img[[i]])), interpolate = TRUE)
+}
 
 ```
 
@@ -85,19 +97,31 @@ skewness_kurtosis_DF
 # --- Run Decision Tree
 source("/u01/rworkspace/ssiinitiative/ore.churn.mdl.DT_lib.R")
 
-mod.DT.details <- ore.doEval(FUN.NAME = "ore.churn.DT",
-                        FUN.OWNER = "RQUSER",
-                        p_dataframe = CHURN,
-                        pY = resVar,
-                        p_imputetype = 'knn',
-                        p_spltratio = 0.70,
-                        p_formula = P_FORMULA,
-                        p_storageDir = destFolder,
-                        p_topn = 20,
-                        ds.name = 'dsDTstore',
-                        ore.connect=TRUE)
+mod.DT.details <- ore.pull(ore.doEval(FUN.NAME = "ore.churn.DT",
+                                      FUN.OWNER = "RQUSER",
+                                      p_dataframe = CHURN,
+                                      pY = resVar,
+                                      p_imputetype = 'knn',
+                                      p_spltratio = 0.70,
+                                      p_formula = P_FORMULA,
+                                      p_storageDir = destFolder,
+                                      p_topn = 20,
+                                      ds.name = 'dsDTstore',
+                                      ore.connect=TRUE),
+                           graphics = TRUE)
 
-mod.DT.details
+# Decision Tree Metric
+mod.DT.metrics <- mod.DT.details$dat
+
+# All DT Images
+library(png)
+library(grid)
+
+for(i in 1:length(mod.DT.details$img))
+{
+  grid.newpage()
+  grid.raster(as.raster(readPNG(mod.DT.details$img[[i]])), interpolate = TRUE)
+}
 
 ```
 
@@ -106,21 +130,32 @@ mod.DT.details
 # --- Run Random Forest
 source("/u01/rworkspace/ssiinitiative/ore.churn.mdl.RF_lib.R")
 
-mod.RF.details <- ore.doEval(FUN.NAME = "ore.churn.RF",
-                             FUN.OWNER = "RQUSER",
-                             p_dataframe = CHURN,
-                             pY = resVar,
-                             p_imputetype = 'knn',
-                             p_spltratio = 0.70,
-                             p_formula = P_FORMULA,
-                             pntree = 1001,
-                             p_topn = 20,
-                             p_storageDir = destFolder,
-                             ds.name = 'dsRFstore',
-                             ore.connect=TRUE
-                            )
+mod.RF.details <- ore.pull(ore.doEval(FUN.NAME = "ore.churn.RF",
+                                      FUN.OWNER = "RQUSER",
+                                      p_dataframe = CHURN,
+                                      pY = resVar,
+                                      p_imputetype = 'knn',
+                                      p_spltratio = 0.70,
+                                      p_formula = P_FORMULA,
+                                      pntree = 1001,
+                                      p_topn = 20,
+                                      p_storageDir = destFolder,
+                                      ds.name = 'dsRFstore',
+                                      ore.connect=TRUE
+                            ),graphics = TRUE)  
 
-mod.RF.details
+# Decision Tree Metric
+mod.RF.metrics <- mod.RF.details$dat
+
+# All RF Images
+library(png)
+library(grid)
+
+for(i in 1:length(mod.RF.details$img))
+{
+  grid.newpage()
+  grid.raster(as.raster(readPNG(mod.RF.details$img[[i]])), interpolate = TRUE)
+}
 
 ```
 
@@ -129,35 +164,47 @@ mod.RF.details
 # --- Run GBM (Gradient Boosting)
 source("/u01/rworkspace/ssiinitiative/ore.churn.mdl.GBM_lib.R")
 
-mod.GBM.details <- ore.doEval(FUN.NAME = "ore.churn.GBM",
-                              FUN.OWNER = "RQUSER",
-                              p_dataframe = CHURN,
-                              pY = resVar,
-                              p_imputetype = 'knn',
-                              p_spltratio = 0.70,
-                              p_formula = P_FORMULA,
-                              p_tree=101,
-                              p_shrinkage=0.01,
-                              p_bagfrac=0.5,
-                              p_train_frac=1,
-                              p_cv=0,
-                              p_verbose=FALSE,
-                              p_dist = 'bernoulli',
-                              p_idepth = 10,
-                              p_minobs = 20,
-                              storageDir = destFolder,
-                              ds.name = 'dsGBMstore',
-                              ore.connect = TRUE
-                              )
+mod.GBM.details <- ore.pull(ore.doEval( FUN.NAME = "ore.churn.GBM", 
+                                        FUN.OWNER = "RQUSER",
+                                        p_dataframe = CHURN,
+                                        pY = resVar,
+                                        p_imputetype = 'knn',
+                                        p_spltratio = 0.70,
+                                        p_formula = P_FORMULA,
+                                        p_tree=101,
+                                        p_shrinkage=0.01,
+                                        p_bagfrac=0.5,
+                                        p_train_frac=1,
+                                        p_cv=0,
+                                        p_verbose=FALSE,
+                                        p_dist = 'bernoulli',
+                                        p_idepth = 10,
+                                        p_minobs = 20,
+                                        storageDir = destFolder,
+                                        ds.name = 'dsGBMstore',
+                                        ore.connect = TRUE
+                              ),graphics = TRUE)
 
-mod.GBM.details
+# Gradient Boosting Metric
+mod.GBM.metrics <- mod.GBM.details$dat
+
+# All GBM Images
+library(png)
+library(grid)
+
+for(i in 1:length(mod.GBM.details$img))
+{
+  grid.newpage()
+  grid.raster(as.raster(readPNG(mod.GBM.details$img[[i]])), interpolate = TRUE)
+}
+
 
 ```
 
 ```{r Model Comparison}
 
 # --- Model Comparison
-df <- data.frame(rownames(ore.pull(mod.DT.details)),ore.pull(mod.DT.details),ore.pull(mod.RF.details),ore.pull(mod.GBM.details))
+df <- data.frame(rownames(mod.DT.metrics),ore.pull(mod.DT.metrics),ore.pull(mod.RF.metrics),ore.pull(mod.GBM.metrics))
 colnames(df) <- c('Metrics','DecisionTree','RandomForest','GradientBoostingTree')
 dfcomp <- data.frame(df[1],df[2],df[3],df[4],row.names = NULL)
 print(dfcomp)
