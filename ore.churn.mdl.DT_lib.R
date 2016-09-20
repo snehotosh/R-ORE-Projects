@@ -1,6 +1,7 @@
 #################################################################
 ## Churn Prediction Library
 ## This is a final version of Decision Tree
+## Done by Snehotosh
 #################################################################
 if(nrow(ore.scriptList(name = "ore.churn.DT")) > 0)
 {
@@ -31,7 +32,7 @@ ore.scriptCreate("ore.churn.DT",
                    #-------------------------------------------------------------------------
                    ## 1. The function actually building the model
                    #-------------------------------------------------------------------------
-                   mdl.training.DT <- function(trainingset,formulae,storageDir,topN,...)
+                   mdl.training.DT <- function(trainingset,formulae,storageDir,topN)
                    {
                      # Loading the rpart library
                      library(rpart)
@@ -39,9 +40,6 @@ ore.scriptCreate("ore.churn.DT",
                      
                      # Building Decision Tree Model
                      treemdl <- rpart(formula = formulae,data = trainingset,method = "class",control = rpart.control(minsplit = 2, minbucket = 1))
-                     
-                     # Plotting the Original Tree without Pruning
-                     invisible(prp(treemdl, extra=2, uniform=T, branch=1, yesno=T, border.col=0, xsep="/",box.col=c("pink", "palegreen3")[treemdl$frame$yval],nn=TRUE,ni=TRUE,main="Original Tree"))
                      
                      # Plotting the complexity parameter - cp
                      plotcp(treemdl)    
@@ -57,97 +55,122 @@ ore.scriptCreate("ore.churn.DT",
                      model.tree.fit <- prune(tree = treemdl,cp = opticp)
                      
                      # Ploting the Tree
-                     # plot(model.tree.fit,uniform = TRUE,main = "Pruned Tree based on min CP")
-                     # text(model.tree.fit, use.n = TRUE, cex = 0.75)
+                     prp(model.tree.fit,uniform = TRUE,main = paste("Pruned Tree based on min CP:", toString(opticp)))
+                     #text(model.tree.fit, use.n = TRUE, cex = 0.75)
                      
                      # Checking the variable importance
-                     mdl.dt.var.importance(modelfit = model.tree.fit,title = "DT Variable Importance",barcolor = "brown",topn = topN)
-                     
-                     ex_desc <- c('0 - No extra information (the default)',
-                                  '1 - Display the number of obs that fall in the node',
-                                  '2 - Class models: display the classification rate at the node',
-                                  '3 - Class models: misclassification rate at the node',
-                                  '4 - Class models: probability per class of obs in the node',
-                                  '5 - Class models: like 4 but do not display the fitted class.',
-                                  '6 - Class models: the prob of the second class only.',
-                                  '7 - Class models: like 6 but do not display the fitted class.',
-                                  '8 - Class models: the prob of the fitted class.',
-                                  '9 - Class models: the prob times the fraction of obs in the node')    
-                     
-                     # Plotting Tree
-                     plot.new()
-                     text(0, .5, "Plotting Tree based on various display and details", pos=4, offset=1,font = 2,col = "red")
-                     
-                     for(i in c(1:9)){  
-                       invisible(prp(model.tree.fit, extra=i, uniform=T, branch=1, yesno=T, border.col=0, xsep="/",box.col=c("pink", "palegreen3")[model.tree.fit$frame$yval],nn=TRUE,ni=TRUE,main=ex_desc[i]))
-                       #print(pp)
-                     }    
-                     
-                     # Plotting Tree based on node complexity
-                     plot.new()
-                     text(0, .5, "Plotting Tree based on node complexity", pos=4, offset=1,font = 2,col = "red")
-                     
-                     plot.tree.complex(modfit = model.tree.fit)    
-                     #dev.off()
+                     mdl.dt.var.importance(modelfit = model.tree.fit,title = "DT Variable Importance",barcolor = "brown",topn = topN)                     
                      
                      return(model.tree.fit)
-                   }
-                   
-                   #-------------------------------------------------------------------------
-                   ## 2.Tree Pruning based on node complexity	
-                   #-------------------------------------------------------------------------
-                   plot.tree.complex <- function(modfit,...)
-                   {           
-                     complexities <- sort(unique(modfit$frame$complexity)) # a vector of complexity values
-                     for(complexity in complexities) {
-                       cols <- ifelse(modfit$frame$complexity >= complexity, 1, "grey")
-                       dev.hold() # hold screen output to prevent flashing
-                       invisible(prp(modfit,extra=2, uniform=T, branch=1, yesno=T, col=cols, branch.col=cols, split.col=cols,box.col=c("pink", "palegreen3")[modfit$frame$yval],nn=TRUE,ni=TRUE,main=paste("Tree Pruning on Node Complexity:",complexity)))
-                       dev.flush()
-                       Sys.sleep(1) # pause for one second    
-                     }         
-                   }
+                   }     
                    
                    #-------------------------------------------------------------------------
                    ## 3.Model Metrics Display
                    #-------------------------------------------------------------------------
-                   mdl.Metric.display <- function(mdlpred,dataset,Y,storageDir,...)
+                   metricROCR <- function(model,testdata,pY,ds.name)
                    {
-                     ## This code is written by Snehotosh Banerjee
-                     ## Dated 4th Feb 2016
-                     ## The function is calculating all required model performance metric
+                     library(ROCR)
+                     library(ggplot2)
                      
-                     ## Model Accuracy Measures
-                     # 1.Accuracy = (TP+TN)/(TP+FN+FP+TN) (1)
-                     # 2.Mis-classification Rate (Error Rate) = 1 - Accuracy
-                     # 3.FP rate = FP/(TN+FP) (2)
-                     # 4.TP rate = Recall = Sensitivity = TP/(TP+FN) (3)
-                     # 5.Specificity
-                     # 6.Precision = TP/(TP+FP) (4)
-                     # 7.F - value = ((1+ß^2)*Recall*Precision) /(ß^2*Recall + Precision)
-                     # 8.ROC Curve - AUC score
-                     # 9.Cohen's Kappa
-                     # 10.Null Error Rate (Accuracy Paradox)
-                     # 11.Gini Coeff = 2*AUC - 1
+                     # Predict
+                     predDT <- predict(object = model,newdata = testdata,type = "class")
+                     predDTprob <- predict(object = model,newdata = testdata,type = "prob")
                      
-                     # Bulding Confusion Matrix      
-                     confusionMatrix <- table(Actual = dataset[ ,Y],Pred = mdlpred)      
-                     print('The Confusion Matrix')
-                     cat('\n')
-                     print(confusionMatrix)
-                     cat('\n')
+                     # Creating predicted probability and actual label predicted dataframe
+                     pred.df <- data.frame(predicted=as.double(predDTprob[,1]),actual=as.numeric(ifelse(testdata[,pY]=="Y",1,0)))
+                     pred.df <- pred.df[order(pred.df$predicted, decreasing=TRUE), ]
                      
-                     # Calculating Accuracy
-                     nlev <- nlevels(dataset[ ,Y])
+                     # Calculate ROCR Prediction
+                     pred.rocr <- prediction(pred.df$predicted, pred.df$actual)
                      
-                     # Getting the NULL hypothesis level name
-                     charlev <- levels(dataset[ ,Y])[1]
+                     # Stats
+                     roc.perf <- performance(pred.rocr, measure = "tpr", x.measure = "fpr")
+                     tpr.perf <- performance(pred.rocr, measure = "tpr")
+                     fpr.perf <- performance(pred.rocr, measure = "fpr")
+                     fnr.perf <- performance(pred.rocr, measure = "fnr")
+                     tnr.perf <- performance(pred.rocr, measure = "tnr")
+                     recall.perf <- performance(pred.rocr, measure = "prec", x.measure = "rec")
+                     sensspec.perf <- performance(pred.rocr, measure = "sens", x.measure = "spec")
+                     lift.perf <- performance(pred.rocr, measure = "lift", x.measure = "rpp")
+                     auc.perf <- performance(pred.rocr, measure = "auc")
+                     accuracy.perf <- performance(pred.rocr, measure = "acc")
+                     err.perf <- performance(pred.rocr, measure = "err")
+                     calibration.perf <- performance(pred.rocr, measure = "cal")
+                     pcmiss.perf <- performance(pred.rocr,"pcmiss","lift")
+                     prbe.perf <- performance(pred.rocr, "prbe")
+                     
+                     ## Scores ##
+                     
+                     # AUC Score
+                     auc_score <- auc.perf@y.values[[1]]
+                     
+                     # Precision/Recall breakeven Score
+                     prbe.score <- prbe.perf@x.values[[1]]
+                     
+                     # Accuracy Rate Score
+                     acc_rate <- max(accuracy.perf@y.values[[1]])
+                     
+                     # Accuracy Rate gt 50% Score
+                     acc_roc_gt_50 <- accuracy.perf@y.values[[1]][max(accuracy.perf@x.values[[1]] > 0.5)]
+                     
+                     # Error Rate Score
+                     error_rate <- min(err.perf@y.values[[1]])
+                     
+                     ## Various Metric Plots ##
+                     # pos/neg densities
+                     ggplot(data=pred.df,aes(x=predicted)) + geom_density(aes(fill=factor(actual)), size=1, alpha=.3) +
+                       scale_x_continuous("Predicted", breaks=(0:4)/4, limits=c(0,1), labels=sprintf("%d%%", (0:4)*25)) +
+                       scale_y_sqrt("Density") + scale_fill_manual(values = c("red","blue")) + ggtitle(label = "Label Separation Density Curve")
+                     
+                     # Draw ROC curve
+                     plot(roc.perf, main="ROC with Convex Hull", colorize=TRUE,print.cutoffs.at = seq(0.1, 0.9, 0.1), lwd = 2)
+                     ch = performance(pred.rocr , "rch")
+                     plot(ch, add = TRUE, lty = 2)
+                     
+                     # Recall-Precision Plot
+                     plot(recall.perf,colorize = T,print.cutoffs.at = seq(0.1, 0.9, 0.1), lwd = 2,main = "Recall-Precision Plot")
+                     
+                     # Sensitivity-Specificity Plot
+                     plot(sensspec.perf,colorize = T,print.cutoffs.at = seq(0.1, 0.9, 0.1), lwd = 2,main = "Sensitivity vs Specificity")
+                     
+                     # Lift Plot
+                     plot(lift.perf,colorize = T,print.cutoffs.at = seq(0.1, 0.9, 0.1), lwd = 2,main = "Lift Plot")
+                     
+                     # Accuracy - Boxplot (Spread)
+                     plot(accuracy.perf, avg= "vertical", spread.estimate="boxplot", show.spread.at= seq(0.1, 1.0, by=0.1),main = "Accuracy - Boxplot (Spread)")
+                     
+                     # Accuracy vs Cutoff
+                     # Get the cutoff for the best accuracy
+                     bestAccInd <- which.max(accuracy.perf@"y.values"[[1]])
+                     bestMsg <- paste("best accuracy=", accuracy.perf@"y.values"[[1]][bestAccInd],"at cutoff=", round(accuracy.perf@"x.values"[[1]][bestAccInd], 4))
+                     plot(accuracy.perf, sub=bestMsg,main = "Accuracy vs Cutoff")
+                     
+                     # TPR vs Cutoff
+                     plot(tpr.perf,main = "TPR vs Cutoff")
+                     
+                     # TNR vs Cutoff
+                     plot(tnr.perf,main = "TNR vs Cutoff")
+                     
+                     # FPR vs Cutoff
+                     plot(fpr.perf,main = "FPR vs Cutoff")
+                     
+                     # FNR vs Cutoff
+                     plot(fnr.perf,main = "FNR vs Cutoff")
+                     
+                     # Prediction-conditioned miss 
+                     plot(pcmiss.perf, colorize=T, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(1.2,1.2), avg="threshold", lwd=3)
+                     
+                     # Confusion Matrix
+                     confusionMatrix <- table(predDT ,testdata[,pY])
+                     confusionMatrix
+                     
+                     ore.save(confusionMatrix,name = ds.name,append = TRUE)
                      
                      # Basic measures calculation from CM
                      TP <- confusionMatrix[1,1]
-                     TN <- confusionMatrix[nlev,nlev]
-                     FN <- confusionMatrix[1,nlev]
-                     FP <- confusionMatrix[nlev,1]
+                     TN <- confusionMatrix[2,2]
+                     FN <- confusionMatrix[1,2]
+                     FP <- confusionMatrix[2,1]
                      TOT <- sum(confusionMatrix)      
                      
                      # Measures
@@ -159,150 +182,56 @@ ore.scriptCreate("ore.churn.DT",
                      Precision <- round(as.numeric(TP/(TP+FP)),3)
                      Fvalue <- round(as.numeric(2*Recall*Precision/(Recall + Precision)),3)
                      
-                     # Get AUC 
-                     library(ROCR)
-                     AUC <- getAUC(title = 'ROC',outcol = ifelse(dataset[,Y] == '1',1,0),predcol = ifelse(mdlpred == '1',1,0))
-                     GiniCoeff <- round(2*as.numeric(AUC) - 1,3)
-                     
-                     # Plot ROC
-                     library(ROCR)
-                     print(plotROC(title = 'ROC Chart',outcol = ifelse(dataset[,Y] == '1',1,0),predcol = ifelse(mdlpred == '1',1,0),areaCol = 'red'))
-                     
-                     # Get the Gain Chart
-                     print(gainCurve(truthcol = ifelse(dataset[,Y] == '1',1,0) ,predcol = ifelse(mdlpred == '1',1,0),title = 'Gain Chart'))
-                     
-                     perf_metric <- rbind(Accuracy,ErrorRate,FPR,Recall,Specificity,Precision,Fvalue,AUC,GiniCoeff)
-                     colnames(perf_metric) <- 'Perf Metrics'
-                     perf_metric <- as.data.frame(perf_metric)   
-                     
-                     return(perf_metric)
-                   }	
+                     df <- rbind(auc_score = auc_score,prbe_score = prbe.score,acc_rocr = acc_rate,accuracy = Accuracy,acc_rocr_gt50 = acc_roc_gt_50,error_rate_rocr = error_rate,error_rate = ErrorRate,fpr = FPR,recall = Recall,specificity = Specificity,precision = Precision,fval = Fvalue)
+                     #colnames(df) <- "scores"
+                     perf_metric <- data.frame(name=rownames(df),score=df,row.names = NULL)   
+                     perf_metric
+                   }                
                    
                    #-------------------------------------------------------------------------
                    ## 4.Decision Tree variable Importance
                    #-------------------------------------------------------------------------
-                   mdl.dt.var.importance <- function(modelfit,title,barcolor,topn,...){           
+                   mdl.dt.var.importance <- function(modelfit,title,barcolor,topn){           
                      library(ggplot2)
                      
-                     varimp_dt <- data.frame(varimp = modelfit['variable.importance'][[1]])
-                     varimp_dt_df <- data.frame(variable = rownames(varimp_dt),varimp = varimp_dt[,'varimp'])  
-                     varimp_dt_df$variable <- factor(varimp_dt_df[,'variable'],levels = varimp_dt_df[order(varimp_dt_df[,'varimp']),"variable"])  
+                     varimp_dt <- modelfit["variable.importance"][[1]]
+                     varimp_dt_df <- data.frame(variable = names(varimp_dt),varimp = varimp_dt)  
+                     varimp_dt_df$variable <- factor(varimp_dt_df[,"variable"],levels = varimp_dt_df[order(varimp_dt_df[,"varimp"]),"variable"])  
                      
                      ## Printing the plot to PDF         
                      ret_df <- data.frame(head(varimp_dt_df[order(-varimp_dt_df$varimp),],topn),row.names = NULL)
                      
                      # creating Chart
-                     gg <- ggplot(data = ret_df,aes(x=variable,y=varimp)) + geom_bar(stat='identity',fill=barcolor) + coord_flip() + ggtitle(title)
+                     gg <- ggplot(data = ret_df,aes(x=variable,y=varimp)) + geom_bar(stat="identity",fill=barcolor) + coord_flip() + ggtitle(title)
                      print(gg)
                      return(ret_df)
                    }
                    # -------------------------------------------------------------------------
                    ## 5.Model Decision Tree prediction
                    # -------------------------------------------------------------------------
-                   mdl.pred.DT <- function(model,validationset,predtype='class',...)
+                   mdl.pred.DT <- function(model,validationset,predtype="class")
                    {
                      # predicting on the validation Set
                      predtree <- predict(object = model,newdata = validationset,type = predtype)  
                      return(predtree)
-                   }
-                   
-                   # ------------------------------------------------------------------------------
-                   ## 6.Plot ROC
-                   # ------------------------------------------------------------------------------
-                   
-                   plotROC <- function(title,outcol,predcol,areaCol='blue') {
-                     pred <- prediction(predcol,outcol)
-                     perf <- performance(pred,'tpr','fpr')
-                     auc <- as.numeric(performance(pred,'auc')@y.values)
-                     dframe <- data.frame(
-                       FPR=perf@x.values[[1]],
-                       TPR=perf@y.values[[1]])
-                     plot=ggplot() +
-                       geom_ribbon(data=dframe,aes(x=FPR,ymax=TPR,ymin=0), fill=areaCol,alpha=0.3) +
-                       geom_point(data=dframe,aes(x=FPR,y=TPR)) + geom_line(aes(x=c(0,1),y=c(0,1))) + coord_fixed() +
-                       ggtitle(paste(title,'\nAUC:',format(auc,digits=3)))
-                     
-                     plot
-                     #list(df=dframe,plot=plot)
-                   }
-                   
-                   # ------------------------------------------------------------------------------
-                   ## 7.Get AUC
-                   # ------------------------------------------------------------------------------
-                   
-                   getAUC <- function(title,outcol,predcol,areaCol='blue') {
-                     pred <- prediction(predcol,outcol)
-                     perf <- performance(pred,'tpr','fpr')
-                     auc <- as.numeric(performance(pred,'auc')@y.values)
-                     auc
-                   }
-                   
-                   # ------------------------------------------------------------------------------
-                   ## 8.Gain Chart
-                   # ------------------------------------------------------------------------------
-                   
-                   areaCalc <- function(x,y) {
-                     # append extra points to get rid of degenerate cases
-                     x <- c(0,x,1)
-                     y <- c(0,y,1)
-                     n <- length(x)
-                     sum(0.5*(y[-1]+y[-n])*(x[-1]-x[-n]))
-                   }
-                   
-                   gainCurve = function(truthcol, predcol, title) {
-                     library(reshape2)
-                     truthcol <- as.numeric(truthcol)
-                     # data frame of pred and truth, sorted in order of the predictions
-                     d = data.frame(predcol=predcol,truthcol=truthcol)
-                     predord = order(d[['predcol']], decreasing=TRUE) # reorder, with highest first
-                     wizard = order(d[['truthcol']], decreasing=TRUE)
-                     npop = dim(d)[1]
-                     
-                     # data frame the cumulative prediction/truth as a function
-                     # of the fraction of the population we're considering, highest first
-                     results = data.frame(pctpop= (1:npop)/npop,
-                                          model = cumsum(d[predord,'truthcol'])/sum(d[['truthcol']]),
-                                          wizard = cumsum(d[wizard, 'truthcol'])/sum(d[['truthcol']]))
-                     
-                     # calculate the areas under each curve
-                     # gini score is 2* (area - 0.5)
-                     idealArea = areaCalc(results$pctpop,results$wizard) - 0.5
-                     modelArea = areaCalc(results$pctpop,results$model) - 0.5
-                     giniScore = modelArea/idealArea # actually, normalized gini score
-                     
-                     # melt the frame into the tall form, for plotting
-                     results = melt(results, id.vars="pctpop", measure.vars=c("model", "wizard"),
-                                    variable.name="sort_criterion", value.name="pct_outcome")
-                     
-                     gplot = ggplot(data=results, aes(x=pctpop, y=pct_outcome, color=sort_criterion)) + 
-                       geom_point() + geom_line() + 
-                       geom_abline(color="gray") +
-                       ggtitle(paste("Gain curve,", title, '\n', 
-                                     'relative Gini score', format(giniScore,digits=2))) +
-                       xlab("% items in score order") + ylab("% total category") +
-                       scale_x_continuous(breaks=seq(0,1,0.1)) +
-                       scale_y_continuous(breaks=seq(0,1,0.1)) +
-                       scale_color_manual(values=c('model'='darkblue', 'wizard'='darkgreen'))
-                     
-                     gplot
-                   }	
+                   }    
                    
                    # -------------------------------------------------------------------
                    ## 10.Data Imputation
                    #--------------------------------------------------------------------
                    
-                   impute.data <- function(data,imputetype='mean',...)
+                   impute.data <- function(data,imputetype="mean")
                    {
                      ## This function imputes NA by mean or median values
-                     if(imputetype == 'mean'){
+                     if(imputetype == "mean"){
                        for (i in which(sapply(data, is.numeric))) {
                          data[is.na(data[, i]), i] <- mean(data[, i],  na.rm = TRUE)
                        }
-                     } else if(imputetype == 'median') {
+                     } else if(imputetype == "median") {
                        for (i in which(sapply(data, is.numeric))) {
                          data[is.na(data[, i]), i] <- median(data[, i],  na.rm = TRUE)
                        }
-                     } else if(imputetype == 'knn'){
+                     } else if(imputetype == "knn"){
                        library(DMwR)      
                        data <- knnImputation(data = data)
                      }else{
@@ -317,7 +246,11 @@ ore.scriptCreate("ore.churn.DT",
                    ## This is the Entry point
                    ######################################################                  	    
                    
+                   # Pulling dataset into ORE transparency Layere
                    dataset <- ore.pull(p_dataframe)
+                   
+                   # Releveling
+                   dataset[ ,pY] <- relevel(dataset[ ,pY],'Y')
                    
                    ## Data splitting into training and validation set
                    splt <- data.split(df = dataset,resVal = pY,seedvalue = 1000,spltratio = p_spltratio)
@@ -329,37 +262,28 @@ ore.scriptCreate("ore.churn.DT",
                    # Imputing the NA on main dataset
                    training_imputed <- impute.data(data = training,imputetype = p_imputetype)
                    
-                   print('#################################################')
-                   print('***1.Model Building -  Decision Tree...')
-                   print('#################################################')
+                   print("#################################################")
+                   print("***1.Model Building -  Decision Tree...")
+                   print("#################################################")
                    
-                   modDT <- mdl.training.DT(trainingset = training,formulae = p_formula,storageDir = p_storageDir,topN = p_topn)
-                   cat('\n')
+                   modDT <- mdl.training.DT(trainingset = training_imputed,formulae = p_formula,storageDir = p_storageDir,topN = p_topn)
                    
-                   print('***2.Model Decision Tree prediction...')
-                   cat('\n')
-                   predtree <- mdl.pred.DT(model = modDT,validationset = validation)
-                   predtree_prob <- mdl.pred.DT(model = modDT,validationset = validation,predtype = 'prob')
+                   print("#################################################")
+                   print("***.COMPLETED - Model Building -  Decision Tree...")
+                   print("#################################################")
                    
-                   print('***3.Model Metrics...')
-                   cat('\n')
-                   mdl_metric_DT <- mdl.Metric.display(mdlpred = predtree,dataset = validation,Y = pY,storageDir = p_storageDir,...)
-                   
-                   cat('\n')
-                   print('#################################################')
-                   print('***.COMPLETED - Model Building -  Decision Tree...')
-                   print('#################################################')
-                   
-                   print('Saving the DT Model')
-                   save(modDT,file = paste0(p_storageDir,'/','trainedModDT.rda'))
+                   print("Saving the DT Model")
+                   save(modDT,file = paste0(p_storageDir,"/","trainedModDT.rda"))
                    
                    if (nrow(ore.datastore(name=ds.name)) > 0 ) 
                    {
                      ore.delete(name = ds.name)
                    }
-                   ore.save(modDT,name = ds.name,append = TRUE)
+                   ore.save(modDT,name = ds.name,append = TRUE)   
                    
-                   #return(mdl_metric_DT) 
+                   print("***3.Model Metrics...")
+                   mdl_metric_DT <- metricROCR(model = modDT,testdata = validation,pY = pY,ds.name = ds.name)
+                   
+                   # Returning the Metrics                   
                    mdl_metric_DT
-                   
                  })
