@@ -1,0 +1,224 @@
+### Author: Snehotosh
+### Classification Algorithm comparison for Dichotomous output (Y/N)
+
+```{r workingdir,echo=FALSE,collapse=TRUE}
+# /u01/app/oracle/product/12.1.0.2/dbhome_1/R/library
+setwd('/u01/rworkspace')
+```
+
+```{r ore_connect,echo=F, message=F,warning=F}
+########################################################################################
+############################     Connecting to ORE             #########################
+########################################################################################
+
+library(ORE)
+ore.connect("rquser",service_name="orcl",host="localhost",password="welcome1", all=TRUE)
+
+```
+
+```{r Importing_Libraries, echo=F, message=F,warning=F}
+########################################################################################
+################     Importing all necessary libraries         #########################
+########################################################################################
+library(caTools)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(ROCR)
+library(ggplot2)
+library(reshape2)
+library(DMwR)
+library(e1071)
+library(gbm)
+
+```
+
+## INPUT PARAMETERS
+
+```{r Defining_Parameters}
+########################################################################################
+#################################      PARAMETER         ###############################
+########################################################################################
+
+# 1.Source Data
+SRC_TABLE <- ore.get('CHURN2')
+
+# 2.Columns for Histogram
+P_HIST_BP_COLS <- c('TOTAL_DAYCALLS','TOTAL_EVECALLS','TOTAL_INTLCALLS','NO_CUST_SRV_CALLS')
+
+# 3.Formula for Model Building and Training
+P_FORMULA <- formula(ISCHURN ~ INT_PLAN + VOICE_MAILPLAN + NO_VMAIL_MSG + TOTAL_DAYMINUTES + TOTAL_DAYCALLS + TOTAL_DAYCHARGE  + 
+                       TOTAL_EVEMINUTES + TOTAL_EVECALLS + TOTAL_EVECHARGE  + TOTAL_NIGHTMINUTES + TOTAL_NIGHTCALLS + TOTAL_NIGHTCHARGE  + TOTAL_INTLMINUTES  + 
+                       TOTAL_INTLCALLS  + TOTAL_INTLCHARGE + NO_CUST_SRV_CALLS)
+
+# 4.Response variable Column Name
+resVar <- 'ISCHURN'
+
+# 5.Destination Folder to Save the Trained Model
+destFolder <- '/u01/rworkspace/ssiout'
+
+```
+
+## Descriptive Statistics
+
+```{r Descriptive Statistics, echo=FALSE,comment='##'}
+
+########################################################################################
+#################################      DESCRIPTIVE STAT  ###############################
+########################################################################################
+
+# --- Run Decriptive Statistic
+source("/u01/rworkspace/ssiinitiative/ore.churn.desc.stat_lib.R")
+
+# --- Run Descriptive Stats
+skewness_kurtosis_DF <- ore.pull(ore.doEval( FUN.NAME = "ore.churn.desc_stat",
+                                             FUN.OWNER = "RQUSER",
+                                             dataset = SRC_TABLE,
+                                             Y = resVar,
+                                             imputeType = 'knn',
+                                             displaycols = P_HIST_BP_COLS,
+                                             destLoc = destFolder,
+                                             boxplot_halign = FALSE,
+                                             ore.connect=TRUE),
+                                 graphics = TRUE)
+```
+
+## Skewness-Kurtosis Tabular Analysis of Predictors
+
+```{r skewness_kurtosis_DF, echo=FALSE,comment='##'}
+
+## Display the Skewness and Kurtosis dataframe
+skewness_kurtosis_DF$dat
+```
+
+## Data Discovery Graphs
+
+```{r data_discovery_charts, echo=FALSE,comment='##'}
+## Display all Charts
+library(png)
+library(grid)
+
+for(i in 1:length(skewness_kurtosis_DF$img))
+{
+  grid.newpage()
+  grid.raster(as.raster(readPNG(skewness_kurtosis_DF$img[[i]])), interpolate = TRUE)
+}
+
+```
+
+## Decision Tree Algorithm
+
+```{r Decision Tree, echo=FALSE,comment='##'}
+
+########################################################################################
+#################################      MODEL RUNNING     ###############################
+########################################################################################
+
+## --- Run Decision Tree
+source("/u01/rworkspace/ssiinitiative/ore.churn.mdl.DT_lib.R")
+
+mod.DT.details <- ore.pull(ore.doEval(FUN.NAME = "ore.churn.DT",
+                                      FUN.OWNER = "RQUSER",
+                                      p_dataframe = SRC_TABLE,
+                                      pY = resVar,
+                                      p_imputetype = 'knn',
+                                      p_spltratio = 0.70,
+                                      p_formula = P_FORMULA,
+                                      p_storageDir = destFolder,
+                                      p_topn = 20,
+                                      ds.name = 'dsDTstore',
+                                      ore.connect=TRUE),
+                           graphics = TRUE)
+```
+
+## Decision Tree Model Metric
+
+```{r DT_Metric, echo=FALSE,comment='##'}
+## Decision Tree Metric
+mod.DT.metrics <- mod.DT.details$dat
+mod.DT.metrics
+```
+
+## Decision Tree Model Graphs
+
+```{r DT_Charts, echo=FALSE,comment='##'}
+## All DT Images
+library(png)
+library(grid)
+
+for(i in 1:length(mod.DT.details$img))
+{
+  grid.newpage()
+  grid.raster(as.raster(readPNG(mod.DT.details$img[[i]])), interpolate = TRUE)
+}
+
+```
+
+## Random Forest Algorithm
+
+```{r Random Forest, echo=FALSE,comment='##'}
+
+## --- Run Random Forest
+source("/u01/rworkspace/ssiinitiative/ore.churn.mdl.RF_lib.R")
+
+mod.RF.details <- ore.pull(ore.doEval(FUN.NAME = "ore.churn.RF",
+                                      FUN.OWNER = "RQUSER",
+                                      p_dataframe = CHURN2,
+                                      pY = resVar,
+                                      p_imputetype = 'knn',
+                                      p_spltratio = 0.70,
+                                      p_formula = P_FORMULA,
+                                      pntree = 501,
+                                      p_topn = 20,
+                                      p_storageDir = destFolder,
+                                      ds.name = 'dsRFstore',
+                                      ore.connect=TRUE
+                            ),graphics = TRUE)  
+```
+
+## Random Forest Model Metric
+```{r RF_Metric, echo=FALSE,comment='##'}
+
+## Decision Tree Metric
+mod.RF.metrics <- mod.RF.details$dat
+mod.RF.metrics
+```
+
+## Random Forest Model Graphs
+
+```{r RF_Charts, echo=FALSE,comment='##'}
+
+## All RF Images
+library(png)
+library(grid)
+
+for(i in 1:length(mod.RF.details$img))
+{
+  grid.newpage()
+  grid.raster(as.raster(readPNG(mod.RF.details$img[[i]])), interpolate = TRUE)
+}
+
+```
+
+## Model Metric Tabular Comparision
+
+```{r Model_Metric_Comp, echo=FALSE,comment='##'}
+
+# --- Model Comparison
+df <- data.frame(mod.DT.metrics[1],mod.DT.metrics[2],mod.RF.metrics[2])
+colnames(df) <- c('Metrics','DecisionTree','RandomForest')
+df
+
+```
+
+## ORE Datastore Names holding the trained Models
+
+```{r ORE_datastore, echo=FALSE,comment='##'}
+
+# --- Checking all models are saved in ore datastore
+
+ore.datastore(name = 'dsDTstore')
+ore.datastore(name = 'dsRFstore')
+
+```
+## End of the Model Training Process
