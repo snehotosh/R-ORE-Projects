@@ -1,19 +1,22 @@
-```{r workingdir}
+### Author: Snehotosh
+### Classification Algorithm comparision
+
+```{r workingdir,echo=FALSE,collapse=TRUE}
 # /u01/app/oracle/product/12.1.0.2/dbhome_1/R/library
 setwd('/u01/rworkspace')
 ```
 
-```{r ore_connect}
+```{r ore_connect, echo=FALSE, collapse=TRUE}
 ########################################################################################
 ############################     Connecting to ORE             #########################
 ########################################################################################
 
 library(ORE)
-ore.connect("rquser",service_name="orcl",host="localhost",password="welcome1", all=TRUE)
-ore.ls()
+invisible(ore.connect("rquser",service_name="orcl",host="localhost",password="welcome1", all=TRUE))
 
 ```
-```{r Importing_Libraries}
+
+```{r Importing_Libraries, echo=FALSE, collapse=TRUE}
 ########################################################################################
 ################     Importing all necessary libraries         #########################
 ########################################################################################
@@ -29,6 +32,8 @@ library(e1071)
 library(gbm)
 
 ```
+
+#### INPUT PARAMETERS
 
 ```{r Defining_Parameters}
 ########################################################################################
@@ -51,7 +56,9 @@ destFolder <- '/u01/rworkspace/ssiout'
 
 ```
 
-```{r Descriptive Statistics}
+## Descriptive Statistics
+
+```{r Descriptive Statistics, echo=FALSE,comment='##'}
 
 ########################################################################################
 #################################      DESCRIPTIVE STAT  ###############################
@@ -60,10 +67,10 @@ destFolder <- '/u01/rworkspace/ssiout'
 # --- Run Decriptive Statistic
 source("/u01/rworkspace/ssiinitiative/ore.churn.desc.stat_lib.R")
 
-# --- Run Descriptive Stats (TESTED FINE)
+# --- Run Descriptive Stats
 skewness_kurtosis_DF <- ore.pull(ore.doEval( FUN.NAME = "ore.churn.desc_stat",
                                              FUN.OWNER = "RQUSER",
-                                             dataset = CHURN,
+                                             dataset = CHURN2,
                                              Y = resVar,
                                              imputeType = 'knn',
                                              displaycols = P_HIST_BP_COLS,
@@ -73,10 +80,10 @@ skewness_kurtosis_DF <- ore.pull(ore.doEval( FUN.NAME = "ore.churn.desc_stat",
                                  graphics = TRUE)
 
 
-# Display the Skewness and Kurtosis dataframe
+## Display the Skewness and Kurtosis dataframe
 skewness_kurtosis_DF$dat
 
-# All Images
+## Display all Charts
 library(png)
 library(grid)
 
@@ -88,18 +95,20 @@ for(i in 1:length(skewness_kurtosis_DF$img))
 
 ```
 
-```{r Decision Tree}
+## Decision Tree Algorithm
+
+```{r Decision Tree, echo=FALSE,comment='##'}
 
 ########################################################################################
 #################################      MODEL RUNNING     ###############################
 ########################################################################################
 
-# --- Run Decision Tree
+## --- Run Decision Tree
 source("/u01/rworkspace/ssiinitiative/ore.churn.mdl.DT_lib.R")
 
 mod.DT.details <- ore.pull(ore.doEval(FUN.NAME = "ore.churn.DT",
                                       FUN.OWNER = "RQUSER",
-                                      p_dataframe = CHURN,
+                                      p_dataframe = CHURN2,
                                       pY = resVar,
                                       p_imputetype = 'knn',
                                       p_spltratio = 0.70,
@@ -110,10 +119,11 @@ mod.DT.details <- ore.pull(ore.doEval(FUN.NAME = "ore.churn.DT",
                                       ore.connect=TRUE),
                            graphics = TRUE)
 
-# Decision Tree Metric
+## Decision Tree Metric
 mod.DT.metrics <- mod.DT.details$dat
+mod.DT.metrics
 
-# All DT Images
+## All DT Images
 library(png)
 library(grid)
 
@@ -125,29 +135,33 @@ for(i in 1:length(mod.DT.details$img))
 
 ```
 
-```{r Random Forest}
 
-# --- Run Random Forest
+## Random Forest Algorithm
+
+
+```{r Random Forest, echo=FALSE,comment='##'}
+
+## --- Run Random Forest
 source("/u01/rworkspace/ssiinitiative/ore.churn.mdl.RF_lib.R")
 
 mod.RF.details <- ore.pull(ore.doEval(FUN.NAME = "ore.churn.RF",
                                       FUN.OWNER = "RQUSER",
-                                      p_dataframe = CHURN,
+                                      p_dataframe = CHURN2,
                                       pY = resVar,
                                       p_imputetype = 'knn',
                                       p_spltratio = 0.70,
                                       p_formula = P_FORMULA,
-                                      pntree = 1001,
+                                      pntree = 501,
                                       p_topn = 20,
                                       p_storageDir = destFolder,
                                       ds.name = 'dsRFstore',
                                       ore.connect=TRUE
                             ),graphics = TRUE)  
 
-# Decision Tree Metric
+## Decision Tree Metric
 mod.RF.metrics <- mod.RF.details$dat
 
-# All RF Images
+## All RF Images
 library(png)
 library(grid)
 
