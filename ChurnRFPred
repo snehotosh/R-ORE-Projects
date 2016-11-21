@@ -1,0 +1,44 @@
+begin
+ sys.rqScriptDrop('ChurnRFPred');
+ sys.rqScriptCreate('ChurnRFPred',
+     'function(dat, datastore_name){
+            library(randomForest)  
+            
+            # Loading Trained Model from existing datastore
+            ore.load(name = datastore_name)
+            
+            # Pulling into R Dataframe
+            testdat <- ore.pull(dat)
+            traindat <- training
+            
+            # Equalizing labels for categorical variable between train and Test Dataset
+            ## Find which columns are factors
+            factor_cols <- names(testdat)[sapply(testdat,is.character)]
+            
+            ## Converting training character columns to factor
+            traindat[, factor_cols] <- lapply(traindat[, factor_cols], as.factor)
+            testdat[, factor_cols] <- lapply(testdat[, factor_cols], as.factor)
+            
+            ## Changing the level
+            for(i in factor_cols){
+              levels(testdat[,i]) <- levels(traindat[,i])
+            }
+            
+            # Predict
+            predRF <- predict(object = modRF,newdata = testdat,type = "class")
+            predRFprob <- predict(object = modRF,newdata = testdat,type = "prob")
+            
+            # Creating predicted probability and actual label predicted dataframe
+            pred.df <- data.frame(id=testdat[,1] ,probY=as.double(predRFprob[,1]), probN=as.double(predRFprob[,2]),Ind = predRF)
+            pred.df
+    }');
+end;
+
+#################################### Execution SQL ###########################
+select *
+from   table(rqTableEval(
+         cursor(select * from churntopred),
+         cursor(select 'dsRFstore' "datastore_name", 1 "ore.connect" from dual),
+        'select CAST(1 as VARCHAR2(20)) ID, 1 PROBA_Y, 1 PROBA_N, CAST(1 as VARCHAR2(2)) IND from dual',
+         'ChurnRFPred'));
+##############################################################################
