@@ -257,9 +257,7 @@ sys.rqScriptCreate('CLASSRF2',
                    
                     # Imputing the NA on main dataset
                     training_imputed <- impute.data(data = training,imputetype = p_imputetype)
-                    validation_imputed <- impute.data(data = validation,imputetype = p_imputetype)
-                    
-
+                    validation_imputed <- impute.data(data = validation,imputetype = p_imputetype)    
                     
                     print("#################################################")
                     print("***1.Model Building -  RandomForest...")
@@ -296,7 +294,8 @@ sys.rqScriptCreate('CLASSRF2',
                     {
                       ore.delete(name = ds.name)
                     }
-                    ore.save(modRF,name = ds.name,append = TRUE)   
+                    ore.save(modRF,name = ds.name,append = TRUE)  
+                    ore.save(training,name = ds.name,append = TRUE)  
                     
                     print("***3.Model Metrics...")
                     
