@@ -70,6 +70,9 @@ sys.rqScriptCreate('CLASSRFETISALAT',
                       
                       #-------------------------------------------------------------------------
                       ## 3.Model Metrics Display
+                      # What percent of your predictions were correct?- Accuracy                    
+                      # What percent of the positive cases did you catch? - recall
+                      # What percent of positive predictions were correct? - precision
                       #-------------------------------------------------------------------------
                       metricROCR <- function(model,testdata,pY,ds.name,p_class_label)
                       {
