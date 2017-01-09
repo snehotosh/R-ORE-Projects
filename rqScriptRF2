@@ -1,7 +1,7 @@
 begin
 sys.rqScriptDrop('CLASSRFCHURN');
 sys.rqScriptCreate('CLASSRFCHURN',
-                 'function(p_dataframe,perc_over,perc_under,kn,isR,p_spltratio,prim_class_label,pY,p_imputetype){                 
+                 'function(p_dataframe,perc_over,perc_under,kn,isR,p_spltratio,prim_class_label,pY,p_imputetype,ds.name){                 
                       #--------------------------------------------------------------------------
                       ## FORMULA for Model Building
                       #--------------------------------------------------------------------------
@@ -10,8 +10,10 @@ sys.rqScriptCreate('CLASSRFCHURN',
                       
                       #--------------------------------------------------------------------------
                       ## PARAMETERS for Model Building
-                      #--------------------------------------------------------------------------                        
-                      p_topn = 20                    
+                      #--------------------------------------------------------------------------    
+                      
+                      p_topn = 20                                   
+                      
                       #-------------------------------------------------------------------------
                       ## 0.Data splitting into train and validation Set
                       #-------------------------------------------------------------------------
@@ -346,7 +348,8 @@ sys.rqScriptCreate('CLASSRFCHURN',
                  }');
 end;
 
-#####################################################################################################################
+#########################################################################################
+
 select * from table(rqTableEval(
                     cursor(select GENDER, AGE, TENURE, PERF_SCORE_Y2011, PERF_SCORE_Y2012, PERF_SCORE_Y2013, 
                     PERF_SCORE_Y2014, TOT_SICK_LEAVES_L4Y , NO_OF_PROMO_L4Y, NO_OF_SVR_CHNG_L4Y , 
@@ -354,7 +357,7 @@ select * from table(rqTableEval(
                     cursor(select 1 as "ore.connect",300 "perc_over",200 "perc_under",20 "kn",'Y' "isR",0.80 "p_spltratio",'Y' "prim_class_label",'ISCHURN' "pY" ,'mean' "p_imputetype",'dsRF_churn_store' "ds.name" from dual),
                     'select CAST(1 as VARCHAR2(20)) METRIC, 1 SCORE from dual',
                     'CLASSRFCHURN'));
-                    
+   
 select * from table(rqTableEval(
                     cursor(select GENDER, AGE, TENURE, PERF_SCORE_Y2011, PERF_SCORE_Y2012, PERF_SCORE_Y2013, 
                     PERF_SCORE_Y2014, TOT_SICK_LEAVES_L4Y , NO_OF_PROMO_L4Y, NO_OF_SVR_CHNG_L4Y , 
@@ -362,3 +365,6 @@ select * from table(rqTableEval(
                     cursor(select 1 as "ore.connect",300 "perc_over",200 "perc_under",20 "kn",'Y' "isR",0.80 "p_spltratio",'Y' "prim_class_label",'ISCHURN' "pY" ,'mean' "p_imputetype",'dsRF_churn_store' "ds.name" from dual),
                     'PNG',
                     'CLASSRFCHURN'));
+
+
+
