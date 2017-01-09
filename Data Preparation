@@ -1,0 +1,132 @@
+/****************************************************
+ Taking employee records where last working date is till 31-DEC-2016
+****************************************************/
+create table AA_EMP_PERF_TRAIN as
+select *
+from AA_EMP_ATTRITION_TRAIN 
+where (LAST_WORKED_DT >= to_date('01-JAN-2016','DD-MON-RR') OR LAST_WORKED_DT is null);
+
+alter table AA_EMP_PERF_TRAIN add constraint pk_emp_perf_train primary key (EMPID);
+
+/****************************************************
+Initial Attrition Train Table
+*****************************************************/
+select count(*) from AA_EMP_ATTRITION_TRAIN;
+
+CREATE TABLE AA_EMP_ATTRITION_TRAIN   
+( EMPID VARCHAR2(30 CHAR),
+  NATIONALITY VARCHAR2(240 CHAR),
+  ENAME VARCHAR2(2000 CHAR),
+  DISABLED_FLG VARCHAR2(30 CHAR),
+  GENDER VARCHAR2(80 CHAR),
+  JOB_NAME VARCHAR2(255 CHAR),
+  AGE NUMBER,
+  TENURE NUMBER,
+  MARITAL_STATUS VARCHAR2(80 CHAR),
+  DEPTNO VARCHAR2(30 CHAR),
+  DEPT_NAME VARCHAR2(255 CHAR),
+  ORIG_HIRE_DT DATE,
+  LAST_WORKED_DT DATE,
+  PERF_SCORE_Y2011 NUMBER,
+  PERF_SCORE_Y2012 NUMBER,
+  PERF_SCORE_Y2013 NUMBER,
+  PERF_SCORE_Y2014 NUMBER,
+  PERF_SCORE_Y2015 NUMBER,
+  PERF_SCORE_Y2016 NUMBER,
+  AVG_PERF_SCORE_L4Y NUMBER,
+  TOT_SICK_LEAVES_L4Y NUMBER,
+  NO_OF_PROMO_L4Y NUMBER,
+  NO_OF_SVR_CHNG_L4Y NUMBER,
+  NO_OF_SALREV_L4Y NUMBER,
+  ISCHURN VARCHAR2(1),
+  CONSTRAINT PK_AA_EMP_ATTRITION_TRAIN PRIMARY KEY (EMPID));
+
+/****************************************************
+Update to convert last_worked date to null
+*****************************************************/
+
+update AA_EMP_ATTRITION_TRAIN set last_worked_dt = null where last_worked_dt = to_date('01-JAN-99','DD-MON-RR');
+
+/****************************************************
+  This is a table containing COMPA RATIO
+****************************************************/
+drop table compa_tab;
+delete from compa_tab;
+
+create table compa_tab
+(
+EMPID varchar2(10),
+COMPA_BAND varchar2(50),
+COMPA_RATIO number(10,4),
+YR varchar2(4)
+);
+
+drop table DEPT_CHNG_TAB;
+
+create table DEPT_CHNG_TAB
+(
+EMPID VARCHAR2(10 BYTE) primary key,
+REASON varchar2(100),
+NO_OF_DEPT_CNG_L4Y number(10)
+);
+
+select * from DEPT_CHNG_TAB;
+
+/****************************************************
+ THE MAIN INPUT TABLE FOR ALL USECASES As-of-Now
+*****************************************************/
+
+drop table AA_ETISALAT_TRAIN_DS;
+
+create table AA_ETISALAT_TRAIN_DS as
+select a.EMPID, 
+a.NATIONALITY, 
+a.ENAME, 
+a.DISABLED_FLG, 
+a.GENDER, 
+a.JOB_NAME, 
+a.AGE, 
+a.TENURE, 
+a.MARITAL_STATUS, 
+a.DEPTNO, 
+a.DEPT_NAME, 
+a.ORIG_HIRE_DT, 
+a.LAST_WORKED_DT, 
+a.PERF_SCORE_Y2011, 
+a.PERF_SCORE_Y2012, 
+a.PERF_SCORE_Y2013, 
+a.PERF_SCORE_Y2014, 
+a.PERF_SCORE_Y2015, 
+a.PERF_SCORE_Y2016, 
+nvl(b.Y2011_CR,0) as Y2011_CR,
+nvl(b.Y2012_CR,0) as Y2012_CR,
+nvl(b.Y2013_CR,0) as Y2013_CR,
+nvl(b.Y2014_CR,0) as Y2014_CR,
+a.TOT_SICK_LEAVES_L4Y, 
+a.NO_OF_PROMO_L4Y, 
+a.NO_OF_SVR_CHNG_L4Y, 
+a.NO_OF_SALREV_L4Y, 
+nvl(c.NO_OF_DEPT_CNG_L4Y,0) as NO_OF_DEPT_CHNG_L4Y,
+a.ISCHURN 
+from AA_EMP_PERF_TRAIN a
+LEFT OUTER JOIN
+(
+    select * from
+    (
+      select empid,compa_ratio,yr from compa_tab
+    )
+    pivot (sum(compa_ratio) as CR for (yr) in ('2011' as Y2011,'2012' as Y2012,'2013' as Y2013,'2014' as Y2014))
+)b on (a.EMPID = b.EMPID)
+LEFT OUTER JOIN  DEPT_CHNG_TAB c on (a.EMPID = c.EMPID);
+
+alter table AA_ETISALAT_TRAIN_DS add constraint pk_AA_ETISALAT_TRAIN_DS primary key(EMPID);
+
+select count(*) from AA_ETISALAT_TRAIN_DS;
+select * from AA_ETISALAT_TRAIN_DS;
+
+/*
+  Getting the DDL
+*/
+select dbms_metadata.get_ddl('TABLE','AA_EMP_PERF_TRAIN') from dual;
+
+select * from AA_ETISALAT_TRAIN_DS where Y2011_CR is null;
