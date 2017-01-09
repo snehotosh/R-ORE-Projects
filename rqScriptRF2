@@ -263,7 +263,7 @@ sys.rqScriptCreate('CLASSRFCHURN',
                       ######################################################                  	    
                       
                       # Pulling dataset into ORE transparency Layer
-                      dataset <- (p_dataframe)        
+                      dataset <- ore.pull(p_dataframe)        
                       
                       ## Find which columns are factors
                       factor_cols <- names(dataset)[sapply(dataset,is.character)]            
