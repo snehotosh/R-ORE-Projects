@@ -10,11 +10,8 @@ sys.rqScriptCreate('CLASSRFCHURN',
                       
                       #--------------------------------------------------------------------------
                       ## PARAMETERS for Model Building
-                      #--------------------------------------------------------------------------    
-                      
-                      p_topn = 20
-                      ds.name = "dsRF_churn_store"               
-                      
+                      #--------------------------------------------------------------------------                        
+                      p_topn = 20                    
                       #-------------------------------------------------------------------------
                       ## 0.Data splitting into train and validation Set
                       #-------------------------------------------------------------------------
@@ -354,7 +351,7 @@ select * from table(rqTableEval(
                     cursor(select GENDER, AGE, TENURE, PERF_SCORE_Y2011, PERF_SCORE_Y2012, PERF_SCORE_Y2013, 
                     PERF_SCORE_Y2014, TOT_SICK_LEAVES_L4Y , NO_OF_PROMO_L4Y, NO_OF_SVR_CHNG_L4Y , 
                     NO_OF_SALREV_L4Y , NO_OF_DEPT_CHNG_L4Y , Y2011_CR , Y2012_CR , Y2013_CR , Y2014_CR, ISCHURN from AA_ETISALAT_TRAIN_DS2),
-                    cursor(select 1 as "ore.connect",300 "perc_over",200 "perc_under",20 "kn",'Y' "isR",0.80 "p_spltratio",'Y' "prim_class_label",'ISCHURN' "pY" ,'mean' "p_imputetype" from dual),
+                    cursor(select 1 as "ore.connect",300 "perc_over",200 "perc_under",20 "kn",'Y' "isR",0.80 "p_spltratio",'Y' "prim_class_label",'ISCHURN' "pY" ,'mean' "p_imputetype",'dsRF_churn_store' "ds.name" from dual),
                     'select CAST(1 as VARCHAR2(20)) METRIC, 1 SCORE from dual',
                     'CLASSRFCHURN'));
                     
@@ -362,6 +359,6 @@ select * from table(rqTableEval(
                     cursor(select GENDER, AGE, TENURE, PERF_SCORE_Y2011, PERF_SCORE_Y2012, PERF_SCORE_Y2013, 
                     PERF_SCORE_Y2014, TOT_SICK_LEAVES_L4Y , NO_OF_PROMO_L4Y, NO_OF_SVR_CHNG_L4Y , 
                     NO_OF_SALREV_L4Y , NO_OF_DEPT_CHNG_L4Y , Y2011_CR , Y2012_CR , Y2013_CR , Y2014_CR, ISCHURN from AA_ETISALAT_TRAIN_DS2),                    
-                    cursor(select 1 as "ore.connect",300 "perc_over",200 "perc_under",20 "kn",'Y' "isR",0.80 "p_spltratio",'Y' "prim_class_label",'ISCHURN' "pY" ,'mean' "p_imputetype" from dual),
+                    cursor(select 1 as "ore.connect",300 "perc_over",200 "perc_under",20 "kn",'Y' "isR",0.80 "p_spltratio",'Y' "prim_class_label",'ISCHURN' "pY" ,'mean' "p_imputetype",'dsRF_churn_store' "ds.name" from dual),
                     'PNG',
                     'CLASSRFCHURN'));
