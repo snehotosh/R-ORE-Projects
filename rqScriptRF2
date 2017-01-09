@@ -1,32 +1,19 @@
 begin
-sys.rqScriptDrop('CLASSRFETISALAT');
-sys.rqScriptCreate('CLASSRFETISALAT',
-                 'function(p_dataframe){                 
+sys.rqScriptDrop('CLASSRFCHURN');
+sys.rqScriptCreate('CLASSRFCHURN',
+                 'function(p_dataframe,perc_over,perc_under,kn,isR,p_spltratio,prim_class_label,pY,p_imputetype){                 
                       #--------------------------------------------------------------------------
                       ## FORMULA for Model Building
                       #--------------------------------------------------------------------------
-                      p_formula <- formula(ISCHURN ~ GENDER + AGE + TENURE + PERF_SCORE_Y2011 + PERF_SCORE_Y2012 + PERF_SCORE_Y2013 + PERF_SCORE_Y2014 + 
-                                               AVG_PERF_SCORE_L4Y + TOT_SICK_LEAVES_L4Y + NO_OF_PROMO_L4Y + NO_OF_SVR_CHNG_L4Y + NO_OF_SALREV_L4Y + 
-                                               NO_OF_DEPT_CHNG_L4Y)                
+                      
+                      p_formula <- as.formula(paste(tail(names(p_dataframe), 1) , paste(head(names(p_dataframe), -1), collapse=" + "), sep=" ~ "))
                       
                       #--------------------------------------------------------------------------
                       ## PARAMETERS for Model Building
-                      #--------------------------------------------------------------------------               
-                      pY = "ISCHURN"
-                      prim_class_label = "Y"
-                      p_imputetype = "mean"
-                      p_spltratio = 0.70
-                      p_storageDir = "D:/R/rworkspace/tutorial/ssiout"
-                      pntree = 501
+                      #--------------------------------------------------------------------------    
+                      
                       p_topn = 20
-                      ds.name = "dsRF_churn_store"
-                      
-                      #----------------- Dataset Balancing -------------------------------------
-                      
-                      perc_over <- 200    # Percentage of Oversampling
-                      perc_under <- 150   # Percentage of Undersampling
-                      kn <- 50            # How many Nearest Neighbours.
-                      isR <- "Y"          # Whether data balancing is needed.
+                      ds.name = "dsRF_churn_store"               
                       
                       #-------------------------------------------------------------------------
                       ## 0.Data splitting into train and validation Set
@@ -41,31 +28,42 @@ sys.rqScriptCreate('CLASSRFETISALAT',
                       #-------------------------------------------------------------------------
                       ## 1.Building Random Forest Model
                       #-------------------------------------------------------------------------
-                      mdl.training.RF <- function(p_trainx,p_trainy,p_ntree){
-                        # Finding optimum mtry
+                    
+                      mdl.training.RF <- function(p_trainx,p_trainy){
                         library(randomForest)
+                        
+                        get_oob_err <- function(model){
+                          a <- capture.output(model)[8]
+                          m <- gregexpr("[0-9]+.[0-9]+",a)
+                          return(as.numeric(regmatches(a,m)[[1]]))
+                        }
+                        
+                        # Intialize err_arr
+                        err_arr <- c()
+                        ntree_vec <- c(101,201,301,401,501,601,701,801,901,1001,1101,1201,1301,1401,1501)
+                        
+                        # Looping through various ntree values
+                        for(i in 1:length(ntree_vec))
+                        {
+                          #set.seed(456)
+                          model <- randomForest(x = p_trainx,y = as.factor(p_trainy),ntree=ntree_vec[i])
+                          err_arr[i] <- get_oob_err(model)
+                        }
+                        print(err_arr)
+                        
+                        # Optimum No. of Trees
+                        opti_ntrees <- min(ntree_vec[which(err_arr == min(err_arr))])
+                        print(opti_ntrees)
+                        
+                        # mtry tuning
                         trf <- tuneRF(x = p_trainx ,y = as.factor(p_trainy), mtryStart=2, ntreeTry=1501, stepFactor=2, improve=0.05, trace=T, plot=FALSE)
                         opti_mtry <- trf[which.min(trf[ ,"OOBError"])]
                         
-                        # Building Model
-                        mdl <- randomForest(x = p_trainx,y = as.factor(p_trainy),ntree=p_ntree,mtry=opti_mtry)  
-                        #mdl <- randomForest(x = p_trainx,y = p_trainy,ntree=p_ntree,mtry=2)
-                        return(mdl)
-                      } 
-                      
-                      #-------------------------------------------------------------------------
-                      ## 2.RandomForest variable Importance
-                      #-------------------------------------------------------------------------
-                      mdl.rf.var.importance <- function(modelfit,title,barcolor="grey",topn){  
-                        library(ggplot2)
-                        rf_imp <- data.frame(variable = rownames(modelfit$importance),MeanDecreaseGini=modelfit$importance,row.names = NULL)
-                        rf_imp$variable <- factor(rf_imp$variable,levels = rf_imp[order(rf_imp$MeanDecreaseGini),"variable"])      
-                        ret_df <- data.frame(head(rf_imp[order(-rf_imp$MeanDecreaseGini),],topn),row.names = NULL)
+                        # Building Model WITH tuned mtry and ntrees
+                        #set.seed(456)
+                        mdl <- randomForest(x = p_trainx,y = p_trainy,ntree=opti_ntrees,mtry=opti_mtry,importance = TRUE,keep.forest = T)  
                         
-                        gg <- ggplot(data = ret_df,aes(x=variable,y=MeanDecreaseGini)) 
-                        varImpchart <- gg + geom_bar(stat="identity",fill=barcolor) + coord_flip() + ggtitle(title)
-                        print(varImpchart)
-                        return(ret_df)
+                        return(mdl)
                       }
                       
                       #-------------------------------------------------------------------------
@@ -88,8 +86,8 @@ sys.rqScriptCreate('CLASSRFETISALAT',
                         pred.df <- pred.df[order(pred.df$predicted, decreasing=TRUE), ]
                         
                         # Calculate ROCR Prediction
-                        pred.rocr <- prediction(pred.df$predicted, pred.df$actual)
-                        
+                        pred.rocr <- prediction(predictions = pred.df$predicted, labels = pred.df$actual)
+                    
                         # Stats
                         roc.perf <- performance(pred.rocr, measure = "tpr", x.measure = "fpr")
                         tpr.perf <- performance(pred.rocr, measure = "tpr")
@@ -189,7 +187,7 @@ sys.rqScriptCreate('CLASSRFETISALAT',
                         Precision <- round(as.numeric(TP/(TP+FP)),3)
                         Fvalue <- round(as.numeric(2*Recall*Precision/(Recall + Precision)),3)
                         
-                        df <- rbind(auc_score = auc_score,prbe_score = prbe.score,acc_rocr = acc_rate,accuracy = Accuracy,acc_rocr_gt50 = acc_roc_gt_50,error_rate_rocr = error_rate,error_rate = ErrorRate,fpr = FPR,recall = Recall,specificity = Specificity,precision = Precision,fval = Fvalue)
+                        df <- rbind(auc_score = auc_score,acc_rocr = acc_rate,accuracy = Accuracy,acc_rocr_gt50 = acc_roc_gt_50,error_rate_rocr = error_rate,error_rate = ErrorRate,fpr = FPR,recall = Recall,specificity = Specificity,precision = Precision,fval = Fvalue)
                         #colnames(df) <- "scores"
                         perf_metric <- data.frame(name=rownames(df),score=df,row.names = NULL)   
                         perf_metric
@@ -254,7 +252,7 @@ sys.rqScriptCreate('CLASSRFETISALAT',
                         if(isRequired == "Y"){
                           data_bal <- SMOTE(form = form,data = data,perc.over = perc.over,k = k,perc.under = perc.under)
                           
-
+                          
                           return(data_bal)
                         }
                         else{
@@ -268,11 +266,11 @@ sys.rqScriptCreate('CLASSRFETISALAT',
                       ######################################################                  	    
                       
                       # Pulling dataset into ORE transparency Layer
-                      dataset <- ore.pull(p_dataframe)        
+                      dataset <- (p_dataframe)        
                       
                       ## Find which columns are factors
                       factor_cols <- names(dataset)[sapply(dataset,is.character)]            
-            
+                      
                       ## Converting training character columns to factor
                       dataset[, factor_cols] <- lapply(dataset[, factor_cols], as.factor) 
                       
@@ -289,7 +287,10 @@ sys.rqScriptCreate('CLASSRFETISALAT',
                       
                       # Handling class Imbalance
                       training_bal <- imbalance_correction(form = p_formula,data = training,perc.over = perc_over,perc.under = perc_under,k = kn,isRequired = isR)
-                     #training_bal[,pY] <- as.factor(training_bal[,pY])
+                      #training_bal[,pY] <- as.factor(training_bal[,pY])
+                      
+                      unbal <- table(training[,pY])
+                      bal <- table(training_bal[,pY])
                       
                       # Imputing the NA on main dataset
                       training_imputed <- impute.data(data = training_bal,imputetype = p_imputetype)
@@ -313,11 +314,14 @@ sys.rqScriptCreate('CLASSRFETISALAT',
                       validation_imputed[sapply(validation_imputed, is.character)] <- lapply(validation_imputed[sapply(validation_imputed, is.character)], as.factor)
                       
                       print("***2.Training the RF Model")
-                      modRF <- mdl.training.RF(p_trainx = p_trainx,p_trainy = p_trainy,p_ntree = pntree)
+                      #modRF <- mdl.training.RF(p_trainx = p_trainx,p_trainy = p_trainy,p_ntree = pntree)
+                      modRF <- mdl.training.RF(p_trainx = p_trainx,p_trainy = p_trainy)
                       
                       print("***3.Random Forest Variable Importance")
-                      mdlRF_Imp <- mdl.rf.var.importance(modelfit = modRF,title = "RF variable Importance",topn = p_topn,barcolor = "brown")
-                      mdlRF_Imp
+                      print(varImpPlot(modRF))
+                      
+                      varImp <- modRF$importance
+                      
                       
                       print("#################################################")
                       print("***.COMPLETED - Model Building -  Random Forest...")
@@ -330,8 +334,10 @@ sys.rqScriptCreate('CLASSRFETISALAT',
                       {
                         ore.delete(name = ds.name)
                       }
-                      ore.save(modRF,name = ds.name,append = TRUE)  
-                      ore.save(training,name = ds.name,append = TRUE)  
+                      ore.save(modRF,name = ds.name,append = TRUE)
+                      ore.save(varImp,name = ds.name,append= TRUE)
+                      ore.save(unbal,name = ds.name,append= TRUE)
+                      ore.save(bal,name = ds.name,append= TRUE)
                       
                       print("***3.Model Metrics...")
                       
@@ -342,3 +348,20 @@ sys.rqScriptCreate('CLASSRFETISALAT',
                       mdl_metric_RF
                  }');
 end;
+
+#####################################################################################################################
+select * from table(rqTableEval(
+                    cursor(select GENDER, AGE, TENURE, PERF_SCORE_Y2011, PERF_SCORE_Y2012, PERF_SCORE_Y2013, 
+                    PERF_SCORE_Y2014, TOT_SICK_LEAVES_L4Y , NO_OF_PROMO_L4Y, NO_OF_SVR_CHNG_L4Y , 
+                    NO_OF_SALREV_L4Y , NO_OF_DEPT_CHNG_L4Y , Y2011_CR , Y2012_CR , Y2013_CR , Y2014_CR, ISCHURN from AA_ETISALAT_TRAIN_DS2),
+                    cursor(select 1 as "ore.connect",300 "perc_over",200 "perc_under",20 "kn",'Y' "isR",0.80 "p_spltratio",'Y' "prim_class_label",'ISCHURN' "pY" ,'mean' "p_imputetype" from dual),
+                    'select CAST(1 as VARCHAR2(20)) METRIC, 1 SCORE from dual',
+                    'CLASSRFCHURN'));
+                    
+select * from table(rqTableEval(
+                    cursor(select GENDER, AGE, TENURE, PERF_SCORE_Y2011, PERF_SCORE_Y2012, PERF_SCORE_Y2013, 
+                    PERF_SCORE_Y2014, TOT_SICK_LEAVES_L4Y , NO_OF_PROMO_L4Y, NO_OF_SVR_CHNG_L4Y , 
+                    NO_OF_SALREV_L4Y , NO_OF_DEPT_CHNG_L4Y , Y2011_CR , Y2012_CR , Y2013_CR , Y2014_CR, ISCHURN from AA_ETISALAT_TRAIN_DS2),                    
+                    cursor(select 1 as "ore.connect",300 "perc_over",200 "perc_under",20 "kn",'Y' "isR",0.80 "p_spltratio",'Y' "prim_class_label",'ISCHURN' "pY" ,'mean' "p_imputetype" from dual),
+                    'PNG',
+                    'CLASSRFCHURN'));
