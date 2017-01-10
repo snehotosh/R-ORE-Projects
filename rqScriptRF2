@@ -320,6 +320,8 @@ sys.rqScriptCreate('CLASSRFCHURN',
                       print(varImpPlot(modRF))
                       
                       varImp <- modRF$importance
+                      varImp_MDG <- varImp[order(varImp[,2],decreasing = T),][,c(1,2)]
+                      varImp_MDA <- varImp[order(varImp[,3],decreasing = T),][,c(1,3)]
                       
                       
                       print("#################################################")
@@ -335,6 +337,8 @@ sys.rqScriptCreate('CLASSRFCHURN',
                       }
                       ore.save(modRF,name = ds.name,append = TRUE)
                       ore.save(varImp,name = ds.name,append= TRUE)
+                      ore.save(varImp_MDG,name = ds.name,append= TRUE)
+                      ore.save(varImp_MDA,name = ds.name,append= TRUE)
                       ore.save(unbal,name = ds.name,append= TRUE)
                       ore.save(bal,name = ds.name,append= TRUE)
                       
