@@ -99,6 +99,12 @@ sys.rqScriptCreate('CLUSTPROFILE',
             #---------------------------------#
             # Output as below:
             #---------------------------------#
+            # Syncing the below tables
+            ore.sync(table = ''AA_UC3CLUS_ASSIGNMENT_TBL'')
+            ore.sync(table = ''AA_UC3CLUS_INFO_TBL'')
+            ore.sync(table = ''AA_UC3CLUS_REPRE_TBL'')
+            ore.sync(table = ''AA_UC3SUMMARY_CLUS1_TBL'')
+            ore.sync(table = ''AA_UC3SUMMARY_CLUS2_TBL'')
             
             # Dropping All cluster related Tables - HARD CODED TABLE NAMES
             tab1 <- ore.exists(name = ''AA_UC3CLUS_ASSIGNMENT_TBL'')
