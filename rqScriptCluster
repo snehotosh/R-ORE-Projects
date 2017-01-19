@@ -1,0 +1,201 @@
+begin
+sys.rqScriptDrop('CLUSTPROFILE');
+sys.rqScriptCreate('CLUSTPROFILE',
+        'function(dat,isDendo = ''N'',isStand = ''T'',ds.name){  
+           ##----------------------------------------------------
+           ## THE FIRST COLUMN SHOULD BE THE PRIMARY KEY ##
+           ## USING PAM (Partitioning Around Medoids) and T-SNE
+           ##----------------------------------------------------
+            # Reading the Table into ore.dataframe
+            ore.ds <- ore.pull(dat)
+            
+            # Converting Character to Factor
+            # Note: ore.pull cannot preserve factors
+            
+            ## Find which columns are factors
+            factor_cols <- names(ore.ds)[sapply(ore.ds,is.character)]            
+            
+            ## Converting training character columns to factor
+            ore.ds[, factor_cols] <- lapply(ore.ds[, factor_cols], as.factor) 
+            
+            #------------------------------------------------------------------------
+            # PAM Clustering
+            #------------------------------------------------------------------------
+            
+            # Finding NA records
+            row.has.na <- apply(ore.ds, 1, function(x){any(is.na(x))}) 
+            
+            # Getting count of NA records
+            sum(row.has.na)
+            
+            # Removing records with NA
+            ore.ds <- ore.ds[!row.has.na,]
+            
+            # Clustering
+            library(cluster) # for gower similarity and pam
+            library(Rtsne) # for t-SNE plot
+            
+            # Distance method
+            gower_dist <- daisy(ore.ds[, -1],metric = "gower",type = list(),stand = isStand)
+            summary(gower_dist)
+            
+            if(isDendo == ''Y''){
+              agnes.clust <- agnes(gower_dist)
+              plot(agnes.clust)
+            }
+            
+            # Calculate silhouette width for many k using PAM
+            sil_width <- c(NA)
+            
+            for(i in 2:10){
+              pam_fit <- pam(gower_dist, diss = TRUE,k = i)
+              sil_width[i] <- pam_fit$silinfo$avg.width
+            }
+            
+            # Plot sihouette width (higher is better)
+            plot(1:10, sil_width,xlab = "Number of clusters",ylab = "Silhouette Width")
+            lines(1:10, sil_width)
+            
+            # Finding optimum no. of Clusters
+            opti_cluster <- which(sil_width == max(sil_width,na.rm=TRUE))
+            opti_cluster
+            
+            # Fitting the Cluster Model
+            pam_fit <- pam(gower_dist, diss = TRUE, k = opti_cluster)
+            
+            # Visualization
+            library(Rtsne)
+            library(ggplot2)
+            library(dplyr)
+            
+            tsne_obj <- Rtsne(gower_dist, is_distance = TRUE)
+            
+            tsne_data <- tsne_obj$Y %>%
+              data.frame() %>%
+              setNames(c("X", "Y")) %>%
+              mutate(cluster = factor(pam_fit$clustering))
+            
+            # t-SNE Based
+            print(ggplot(aes(x = X, y = Y), data = tsne_data) + geom_point(aes(color = cluster)))
+            
+            # PCA Based
+            if(isStand == ''Y''){
+              clusplot(x = ore.ds,clus = pam_fit$clustering, color=TRUE, shade=TRUE, labels=0, lines=0,main = "PAM Clustering - Standardization - PCA")
+            } else{
+              clusplot(x = ore.ds,clus = pam_fit$clustering, color=TRUE, shade=TRUE, labels=0, lines=0,main = "PAM Clustering - Non Standardization - PCA")
+            }
+            
+            #------------------------------#
+            # Cluster Interpretation
+            # Via Descriptive Statistics
+            #------------------------------#
+            
+            pam_results <- ore.ds %>%
+              dplyr::select(-EMPID) %>%
+              mutate(CLUSTER = pam_fit$clustering) %>%
+              group_by(CLUSTER) %>%
+              do(the_summary = summary(.))
+            
+            #---------------------------------#
+            # Output as below:
+            #---------------------------------#
+            
+            # Dropping All cluster related Tables - HARD CODED TABLE NAMES
+            tab1 <- ore.exists(name = ''AA_UC3CLUS_ASSIGNMENT_TBL'')
+            tab2 <- ore.exists(name = ''AA_UC3CLUS_INFO_TBL'')
+            tab3 <- ore.exists(name = ''AA_UC3CLUS_REPRE_TBL'')
+            tab4 <- ore.exists(name = ''AA_UC3SUMMARY_CLUS1_TBL'')
+            tab5 <- ore.exists(name = ''AA_UC3SUMMARY_CLUS2_TBL'')
+            
+            if(tab1){
+              ore.exec("DROP TABLE AA_UC3CLUS_ASSIGNMENT_TBL")
+            } 
+            
+            if(tab2){
+              ore.exec("DROP TABLE AA_UC3CLUS_INFO_TBL")
+            } 
+            
+            if(tab3){
+              ore.exec("DROP TABLE AA_UC3CLUS_REPRE_TBL")
+            } 
+            
+            if(tab4){
+              ore.exec("DROP TABLE AA_UC3SUMMARY_CLUS1_TBL")
+            } 
+            
+            if(tab5){
+              ore.exec("DROP TABLE AA_UC3SUMMARY_CLUS2_TBL")
+            } 
+            
+            # 1.Cluster Number with the record
+            ore.ds$CLUS_ASSIGN <- paste0(''Cluster'',pam_fit[[''clustering'']])
+            
+            # 2.Cluster Info
+            clust_info <- data.frame(pam_fit$clusinfo)
+            
+            # 3.Cluster Summary
+            # Create Cluster Summary Table
+            for(i in 1:opti_cluster)
+            {
+              df <- data.frame(unclass(pam_results$the_summary[[i]]), check.names = FALSE, stringsAsFactors = FALSE)
+              ore.create(x = df,table = paste0(''AA_UC3SUMMARY_CLUS'',i,''_TBL''))
+            }
+            
+            #---------------------------------------#
+            # 4.Barplot for each numerical variables
+            #---------------------------------------#
+            
+            ## Getting only numeric variable
+            # Find the numeric columns
+            num_cols_indx <- sapply(X = ore.ds[,-1],FUN = is.numeric)
+            factor_cols_indx <- sapply(X = ore.ds[,-1],FUN = is.factor)
+            
+            num_cols <- data.frame(ore.ds[,-1][,num_cols_indx])
+            factor_cols <- ore.ds[,-1][,factor_cols_indx]
+            
+            # Plotting Boxplot for each columns against Cluster Number
+            for(cols in colnames(num_cols))
+            {
+              form <- paste(cols,''~ CLUS_ASSIGN'')
+              boxplot(formula = as.formula(form),data = ore.ds, main=toupper(paste("Employee -",cols)), 
+                      font.main=3, cex.main=1.2, xlab="Cluster Number", ylab=cols, font.lab=3, 
+                      col=c(''red'',''lightgreen'',''green'',''grey'',''cyan''),range = 0)
+            }
+            
+            #----------------------------------#
+            # 5.Medoid records of each cluster
+            #----------------------------------#
+            clus_represent <- ore.ds[pam_fit$medoids, ]
+            
+            #-----------------#
+            # 6.CREATING Tables
+            #-----------------#
+            ## 1. Main Table with assignment
+            ore.create(x = ore.ds,table = ''AA_UC3CLUS_ASSIGNMENT_TBL'')
+            
+            ## 2. Cluster Information
+            ore.create(x = clust_info,table = ''AA_UC3CLUS_INFO_TBL'')
+            
+            ## 3. Cluster Representative
+            ore.create(x = clus_represent,table = ''AA_UC3CLUS_REPRE_TBL'')
+            
+            #print("Saving the Cluster Model")
+          
+            if (nrow(ore.datastore(name=ds.name)) > 0 ) 
+            {
+              ore.delete(name = ds.name)
+            }
+            ore.save(pam_fit,name = ds.name,append = TRUE)
+            
+            # Dummy Return Dataframe
+            data.frame(x = 1)  
+        }');
+end;
+
+-------------------------------------------------------
+
+select * from table(rqTableEval(
+                    cursor(select * from AA_CLUS_TRAIN_TBL),                    
+                    cursor(select 1 as "ore.connect",'ds_cluster_store' "ds.name" from dual),
+                    'PNG',
+                    'CLUSTPROFILE'));
