@@ -205,3 +205,20 @@ select * from table(rqTableEval(
                     cursor(select 1 as "ore.connect",'ds_cluster_store' "ds.name" from dual),
                     'PNG',
                     'CLUSTPROFILE'));
+-------------------------------------------------------
+
+create or replace procedure test_prc is
+  sql_stmt varchar2(6000);
+begin
+sql_stmt:='CREATE TABLE AA_UC3_PNG_TBL AS
+           select * from table(rqTableEval(
+                    cursor(select * from AA_CLUS_TRAIN_TBL),                    
+                    cursor(select 1 as "ore.connect",''ds_cluster_store'' "ds.name" from dual),
+                    ''PNG'',
+                    ''CLUSTPROFILE''))';
+dbms_output.enable(100000);
+dbms_output.put_line(sql_stmt);
+execute immediate sql_stmt;
+end;
+
+-------------------------------------------------------
