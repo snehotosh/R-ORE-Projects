@@ -262,10 +262,5 @@ END;
 
 /* Calling the Procedure */
 BEGIN
-	AA_UC1_TRAIN_PRC('select GENDER, AGE, TENURE, PERF_YR1, 
-                    PERF_YR2, PERF_YR3, PERF_YR4,COMPA_BAND_YR1,
-                    COMPA_BAND_YR2,COMPA_BAND_YR3,COMPA_BAND_YR4, 
-                    SICKLV_YR1,SICKLV_YR2,SICKLV_YR3,SICKLV_YR4, PROMO_L4Y, SVR_CHNG_L4Y , 
-                    SALREV_L4Y , DEPT_CHNG_L4Y , ISCHURN FROM AA_COMMN_MDL_TRAIN_TBL', 
-                    'Y',300,200,0.8 ,'Y');
+  AA_UC3_PRC('N');
 END;
