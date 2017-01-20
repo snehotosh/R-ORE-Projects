@@ -1,0 +1,107 @@
+/*********************************************************
+Usecase 2 - R Script for Employee Performance Training - TESTED OK
+Author: Snehotosh Banerjee
+Date: 20/01/2017
+
+ORE Script Name:
+	CLASSRFCHURN
+	
+Packages:
+	randomForest # RandomForest Algorithm
+	caTools      # For Data Split
+	ROCR	     # Visualizing classifier performance in R
+	ggplot2      # Visualization
+	DMwR	     # SMOTE for Rare class Balancing
+	
+Algorithm:
+	RandomForest 
+	
+Output Tables:
+	AA_UC2_MDL_METRICS_TBL
+	AA_UC2_MDL_IMG_TBL
+	
+**********************************************************/
+
+CREATE OR REPLACE PROCEDURE AA_UC2_TRAIN_PRC(p_sql VARCHAR2,
+                                             p_is_bal_reqd VARCHAR2,
+                                             p_perc_os NUMBER,
+                                             p_perc_us NUMBER,
+                                             p_trn_ratio NUMBER,
+                                             p_tgt_class_label VARCHAR2) IS
+    sql_stmt varchar2(6000);
+    sql_img_stmt varchar2(6000);
+    sql_drop_stmt varchar2(4000);
+    sql_drop_img_stmt varchar2(4000);
+    v_count1 NUMBER:=0;
+    v_count2 NUMBER:=0;
+    v_tgt_metric_tab VARCHAR2(30):='AA_UC2_MDL_METRICS_TBL';   
+    v_tgt_img_tab VARCHAR2(30):='AA_UC2_MDL_IMG_TBL';
+    ex EXCEPTION;
+BEGIN
+        /*
+          Target table drop code
+        */
+        sql_drop_stmt:= 'DROP TABLE '||v_tgt_metric_tab;
+        sql_drop_img_stmt:= 'DROP TABLE '||v_tgt_img_tab;
+        
+        /*
+          Checking whether table exists
+        */
+        select count(*) INTO v_count1 from user_tables where table_name = v_tgt_metric_tab;
+        select count(*) INTO v_count2 from user_tables where table_name = v_tgt_img_tab;
+
+        /* Checking whether table exists */
+        IF v_count1 > 0 THEN
+            execute immediate sql_drop_stmt;
+        END IF;
+        
+        IF v_count2 > 0 THEN
+            execute immediate sql_drop_img_stmt;
+        END IF;
+        
+        /* Calling Oracle R Embedded Script for Metric */
+        sql_stmt:= 'CREATE TABLE '||v_tgt_metric_tab||' 
+                    AS
+                    SELECT * FROM TABLE(rqTableEval(
+                    cursor('|| p_sql ||'),
+                    cursor(select 1 as "ore.connect",'||p_perc_os||' "perc_over",'||p_perc_us||' "perc_under",20 "kn",
+                    '''||p_is_bal_reqd||''' "isR",'||p_trn_ratio||' "p_spltratio",'''||p_tgt_class_label||''' "prim_class_label",
+                    ''PERF_CATEG1'' "pY" ,''mean'' "p_imputetype",''dsRF_perf_store'' "ds.name" from dual),
+                    ''select CAST(1 as VARCHAR2(20)) METRIC, 1 SCORE from dual'',
+                    ''CLASSRFCHURN''))';
+        
+        /* Calling Oracle R Embedded Script for Charts */
+        sql_img_stmt:= 'CREATE TABLE '||v_tgt_img_tab||' 
+                        AS
+                        SELECT * FROM TABLE(rqTableEval(
+                        cursor('|| p_sql ||'),
+                        cursor(select 1 as "ore.connect",'||p_perc_os||' "perc_over",'||p_perc_us||' "perc_under",20 "kn",
+                        '''||p_is_bal_reqd||''' "isR",'||p_trn_ratio||' "p_spltratio",'''||p_tgt_class_label||''' "prim_class_label",
+                        ''PERF_CATEG1'' "pY" ,''mean'' "p_imputetype",''dsRF_perf_store'' "ds.name" from dual),
+                        ''PNG'',
+                        ''CLASSRFCHURN''))';
+        
+        dbms_output.enable(100000);
+        dbms_output.put_line(sql_stmt);  
+        
+        /* Executing the statement for building table */
+        execute immediate sql_stmt; 
+        execute immediate sql_img_stmt; 
+EXCEPTION
+  when ex then
+      DBMS_OUTPUT.PUT_LINE('I am in exception');
+  when others then
+      DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                     ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                     ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                     '''');
+END;
+
+/* Calling Procedure */
+BEGIN
+	AA_UC2_TRAIN_PRC('select NATIONALITY, GENDER, AGE, TENURE, MARITAL_STATUS,DISABLED_FLG,COMPA_BAND_YR1,
+                    COMPA_BAND_YR2,COMPA_BAND_YR3,COMPA_BAND_YR4, 
+                    SICKLV_YR1,SICKLV_YR2,SICKLV_YR3,SICKLV_YR4, PROMO_L4Y, SVR_CHNG_L4Y , 
+                    SALREV_L4Y , DEPT_CHNG_L4Y , PERF_CATEG1 FROM AA_COMMN_MDL_TRAIN_TBL', 
+                    'N',300,200,0.8 ,'RATING >3');
+END;
