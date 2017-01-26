@@ -100,6 +100,10 @@ sys.rqScriptCreate('CLUSTPROFILE',
               data.frame() %>%
               setNames(c("X", "Y")) %>%
               mutate(cluster = factor(pam_fit$clustering))
+	      
+	      # Alternative coding without dplyr
+	      # tsne_data <- setNames(data.frame(tsne_obj$Y),c("X","Y"))
+	      # tsne_data$cluster <-  factor(pam_fit$clustering)
             
             # t-SNE Based
             print(ggplot(aes(x = X, y = Y), data = tsne_data) + geom_point(aes(color = cluster)))
@@ -121,6 +125,15 @@ sys.rqScriptCreate('CLUSTPROFILE',
               mutate(CLUSTER = pam_fit$clustering) %>%
               group_by(CLUSTER) %>%
               do(the_summary = summary(.))
+	      
+	    # Alternative coding without dplyr
+	    #  pam_results <- ds_cluster6[,-which(names(ds_cluster6) == "EMPID")]
+	    #  pam_results$CLUSTER <- pam_fit$clustering
+
+	    #  the_summary <- list()
+	    #  for(i in 1:opti_cluster){
+	    #	  the_summary[[i]] <- summary(subset(pam_results1,CLUSTER==i)) 
+	    #   }
             
             #---------------------------------#
             # Output as below:
