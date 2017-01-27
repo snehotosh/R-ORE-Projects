@@ -896,6 +896,15 @@ create or replace PACKAGE AA_USECASE_ALGO_RUN_PKG AS
   
   /* Usecase 1 - Employee Data Profiling */
   PROCEDURE AA_UC3_PRC(p_isDendoReqd VARCHAR2);
+  PROCEDURE AA_UC5_PRC(p_sql VARCHAR2,
+                                        p_is_seasonal VARCHAR2,
+                                        p_ts_measure_col VARCHAR2,
+                                        p_ts_time_col VARCHAR2,
+                                        p_ts_freq NUMBER,
+                                        p_forecast_period NUMBER,
+                                        p_is_window VARCHAR2,
+                                        p_start_win NUMBER,
+                                        p_end_win NUMBER);
 END AA_USECASE_ALGO_RUN_PKG;
 
 create or replace
@@ -1102,4 +1111,83 @@ PACKAGE BODY AA_USECASE_ALGO_RUN_PKG AS
                                  ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
                                  '''');
             END;
+            
+            PROCEDURE AA_UC5_PRC(p_sql VARCHAR2,
+                                        p_is_seasonal VARCHAR2,
+                                        p_ts_measure_col VARCHAR2,
+                                        p_ts_time_col VARCHAR2,
+                                        p_ts_freq NUMBER,
+                                        p_forecast_period NUMBER,
+                                        p_is_window VARCHAR2,
+                                        p_start_win NUMBER,
+                                        p_end_win NUMBER) IS
+                      sql_stmt varchar2(6000);
+                      sql_img_stmt varchar2(6000);
+                      sql_drop_stmt varchar2(4000);
+                      sql_drop_img_stmt varchar2(4000);
+                      v_count NUMBER:=0;
+                      v_img_count NUMBER:=0;
+                      v_tab_name VARCHAR2(30):='AA_UC5_FORECAST_TBL';   
+                      v_tab_img_name VARCHAR2(30):='AA_UC5_FORECAST_IMG_TBL';   
+                      ex EXCEPTION;
+                  BEGIN
+                          /*
+                            Target table drop code
+                          */
+                          sql_drop_stmt:= 'DROP TABLE '||v_tab_name;
+                          sql_drop_img_stmt:= 'DROP TABLE '||v_tab_img_name;
+
+                          /*
+                            Checking whether table exists
+                          */
+                          select count(*) INTO v_count from user_tables where table_name = v_tab_name;
+                          select count(*) INTO v_img_count from user_tables where table_name = v_tab_name;
+
+                          /* Checking whether table exists */
+                          IF v_count > 0 THEN
+                              execute immediate sql_drop_stmt;
+                          END IF;      
+
+                          IF v_img_count > 0 THEN
+                              execute immediate sql_drop_img_stmt;
+                          END IF;   
+
+                          /* Calling Oracle R Embedded Script for Metric */
+                          sql_stmt:= 'CREATE TABLE '||v_tab_name||' 
+                                      AS
+                                      SELECT * FROM TABLE(rqTableEval(
+                                      cursor('|| p_sql ||'),
+                                      cursor(select 1 as "ore.connect",'''||p_is_seasonal||''' "is.seasonal",
+                                      '''||p_ts_measure_col||''' "ts.measure.col",'''||p_ts_time_col||''' "ts.time.col",
+                                      '||p_ts_freq||' "ts.freq",'||p_forecast_period||' "forecast.period", 
+                                      '''||p_is_window||''' "is.window",'||p_start_win||' "start.win",'||p_end_win||' "end.win",
+                                      ''dsRF_payroll_store'' "ds.name" from dual),
+                                      ''select 1 FORECAST, 1 LO_80, 1 HI_80, 1 LO_95, 1 HI_95 from dual'',
+                                      ''PAYROLLTS''))';
+
+                          /* Calling Oracle R Embedded Script for Charts */
+                          sql_img_stmt:= 'CREATE TABLE '||v_tab_img_name||' 
+                                      AS
+                                      SELECT * FROM TABLE(rqTableEval(
+                                      cursor('|| p_sql ||'),
+                                      cursor(select 1 as "ore.connect",'''||p_is_seasonal||''' "is.seasonal",
+                                      '''||p_ts_measure_col||''' "ts.measure.col",'''||p_ts_time_col||''' "ts.time.col",
+                                      '||p_ts_freq||' "ts.freq",'||p_forecast_period||' "forecast.period", 
+                                      '''||p_is_window||''' "is.window",'||p_start_win||' "start.win",'||p_end_win||' "end.win",
+                                      ''dsRF_payroll_store'' "ds.name" from dual),
+                                      ''PNG'',
+                                      ''PAYROLLTS''))';                    
+
+                          /* Executing the statement for building table */
+                          execute immediate sql_stmt; 
+                          execute immediate sql_img_stmt; 
+                  EXCEPTION
+                    when ex then
+                        DBMS_OUTPUT.PUT_LINE('I am in exception');
+                    when others then
+                        DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                                       ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                                       ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                                       '''');
+                  END;
 END;
