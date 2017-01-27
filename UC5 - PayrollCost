@@ -1,0 +1,68 @@
+/*********************************************************
+Usecase 5 - R Script for forecasting Payroll Cost - TESTED OK
+Author: Snehotosh Banerjee
+Date: 27/01/2017
+
+ORE Script Name:
+	PAYROLLTS
+	
+Packages:
+	fpp # Forecasting
+	zoo # Timeseries
+	
+Algorithm:
+	auto.arima
+  
+Output Tables:
+AA_UC5_FORECAST_TBL
+AA_UC5_FORECAST_IMG_TBL
+
+*********************************************************/
+
+BEGIN
+sys.rqScriptDrop('PAYROLLTS');
+sys.rqScriptCreate('PAYROLLTS','function(df,ds.name,is.seasonal,ts.measure.col,ts.time.col,ts.freq,forecast.period,is.window,start.win,end.win)
+                                {
+                                  # Import Library
+                                  library(fpp)
+                                  library(zoo)
+                                
+                                  # Converting ore.dataframe to R dataframe
+                                  payroll.ds <- ore.pull(df)
+                                  
+                                  # converting to Time Series
+                                   if(is.window == ''N'')
+                                   {
+                                    payroll_ts <- ts(zoo(payroll.ds[,ts.measure.col], order.by=as.yearmon(payroll.ds[,ts.time.col])),frequency = ts.freq)
+                                   }
+                                   else{
+                                    payroll_ts <- window(ts(zoo(payroll.ds[,ts.measure.col], order.by=as.yearmon(payroll.ds[,ts.time.col])),frequency = ts.freq),start = start.win,end = end.win)
+                                   }
+                                  # Fitting into model to get the ARIMA(p,d,q)
+                                  fit <- auto.arima(payroll_ts,seasonal = is.seasonal)
+                                
+                                  # Accuracy of ARIMA
+                                  accuracy.arima <- accuracy(fit)
+                                  
+                                  # Time Series residuals Analysis
+                                  print(tsdisplay(residuals(fit)))
+                                  
+                                  # Forecasting
+                                  forecast.fit <- forecast(fit,h = forecast.period)                                  
+                                  plot(forecast.fit)
+                                  
+                                  if (nrow(ore.datastore(name=ds.name)) > 0 ) 
+                                  {
+                                    ore.delete(name = ds.name)
+                                  }
+                                  ore.save(fit,name = ds.name,append = TRUE)  
+                                  ore.save(forecast.fit,name = ds.name,append = TRUE)
+                                  ore.save(accuracy.arima,name = ds.name,append = TRUE)
+                                  
+                                  # Returning Foreast value
+                                  forecast.df <- data.frame(forecast.fit)
+                                  colnames(forecast.df) <- c("FORECAST","CONF_LO_80","CONF_HI_80","CONF_LO_95","CONF_HI_95")
+                                  forecast.df
+                                }'
+                  );
+END;
