@@ -33,11 +33,17 @@ sys.rqScriptCreate('PAYROLLTS','function(df,ds.name,is.seasonal,ts.measure.col,t
                                   # converting to Time Series
                                    if(is.window == ''N'')
                                    {
-                                    payroll_ts <- ts(zoo(payroll.ds[,ts.measure.col], order.by=as.yearmon(payroll.ds[,ts.time.col])),frequency = ts.freq)
+                                    #payroll_ts <- ts(zoo(payroll.ds[,ts.measure.col], order.by=as.yearmon(payroll.ds[,ts.time.col])),frequency = ts.freq)
+                                    payroll_ts <- ts(payroll.ds[,ts.measure.col],frequency = ts.freq)
                                    }
                                    else{
-                                    payroll_ts <- window(ts(zoo(payroll.ds[,ts.measure.col], order.by=as.yearmon(payroll.ds[,ts.time.col])),frequency = ts.freq),start = start.win,end = end.win)
+                                    payroll_ts <- ts(payroll.ds[,ts.measure.col],frequency = ts.freq,start = start.win,end = end.win)
                                    }
+                                   
+                                   # Seasonal Plot
+                                   seasonplot(payroll_ts,ylab="AUD", xlab="Year", main="Seasonal plot: Payroll Cost",
+                                              year.labels=TRUE, year.labels.left=TRUE, col=1:20, pch=19)
+           
                                   # Fitting into model to get the ARIMA(p,d,q)
                                   fit <- auto.arima(payroll_ts,seasonal = is.seasonal)
                                 
