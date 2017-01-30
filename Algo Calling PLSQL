@@ -1,0 +1,68 @@
+/* Calling Procedure - UC1 - Attrition */
+BEGIN
+	AA_USECASE_ALGO_RUN_PKG.AA_UC1_TRAIN_PRC(
+  p_sql =>   'select GENDER, AGE, TENURE, PERF_YR1, 
+                    PERF_YR2, PERF_YR3, PERF_YR4,COMPA_BAND_YR1,
+                    COMPA_BAND_YR2,COMPA_BAND_YR3,COMPA_BAND_YR4, 
+                    SICKLV_YR1,SICKLV_YR2,SICKLV_YR3,SICKLV_YR4, PROMO_L4Y, SVR_CHNG_L4Y , 
+                    SALREV_L4Y , DEPT_CHNG_L4Y , ISCHURN FROM AA_COMMN_MDL_TRAIN_TBL',
+  p_is_bal_reqd => 'Y',
+  p_perc_os => 300,
+  p_perc_us => 200,
+  p_trn_ratio => 0.8,
+  p_tgt_class_label => 'Y');
+END;
+
+-- CHECK
+select * from AA_UC1_MDL_METRICS_TBL;
+select * from AA_UC1_MDL_IMG_TBL;
+
+/* Calling Procedure - UC2 - Performance */
+BEGIN
+	AA_USECASE_ALGO_RUN_PKG.AA_UC2_TRAIN_PRC(
+  p_sql =>   'select NATIONALITY, GENDER, AGE, TENURE, MARITAL_STATUS,DISABLED_FLG,COMPA_BAND_YR1,
+                    COMPA_BAND_YR2,COMPA_BAND_YR3,COMPA_BAND_YR4, 
+                    SICKLV_YR1,SICKLV_YR2,SICKLV_YR3,SICKLV_YR4, PROMO_L4Y, SVR_CHNG_L4Y , 
+                    SALREV_L4Y , DEPT_CHNG_L4Y , PERF_CATEG1 FROM AA_COMMN_MDL_TRAIN_TBL',
+  p_is_bal_reqd => 'N',
+  p_perc_os => 300,
+  p_perc_us => 200,
+  p_trn_ratio => 0.8,
+  p_tgt_class_label => 'RATING >3');
+END;
+
+--CHECK
+select * from AA_UC2_MDL_METRICS_TBL;
+select * from AA_UC3_MDL_IMG_TBL;
+
+/* Calling the Procedure - UC3 - Profiling */
+BEGIN
+  AA_USECASE_ALGO_RUN_PKG.AA_UC3_PRC(p_isDendoReqd => 'N');
+END;
+
+-- CHECK
+select table_name from user_tables where table_name like 'AA_UC3%';
+
+select * from AA_UC3_PNG_TBL;
+select * from AA_UC3SUMMARY_CLUS2_TBL;
+select * from AA_UC3SUMMARY_CLUS1_TBL;
+select * from AA_UC3CLUS_REPRE_TBL;
+select * from AA_UC3CLUS_INFO_TBL;
+select * from AA_UC3CLUS_ASSIGNMENT_TBL;
+
+/* Calling the Procedure - UC5 - Payroll Cost */
+BEGIN
+AA_USECASE_ALGO_RUN_PKG.AA_UC5_PRC(p_sql => 'select YRMON,PAYROLL_COST from AA_PAYROLL_COST_TBL',
+           p_is_seasonal => 'T' ,
+           p_ts_measure_col => 'PAYROLL_COST',
+           p_ts_time_col => 'YRMON',
+           p_ts_freq => 12,
+           p_forecast_period => 12 ,
+           p_is_window => 'N',
+           p_start_win => 2011,
+           p_end_win => 2015);
+END;
+
+-- CHECK
+select * from AA_UC5_FORECAST_TBL;
+select * from AA_UC5_FORECAST_IMG_TBL;
