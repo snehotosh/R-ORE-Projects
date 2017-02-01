@@ -2,7 +2,8 @@ This contains code for ORE for doing classification problem like churn (in this 
 1) UC1 - Employee Attrition
 2) UC2 - Employee Performance
 3) UC3 - Employee Profiling
-4) UC4 - Payroll Cost (Coming Soon)
+4) UC4 - Payroll Cost
+5) UC5 - Renege in Recruitment (Coming Soon)
 
 It contains a library containing all necessary functions for:
 1) Hyperparameter optimization
