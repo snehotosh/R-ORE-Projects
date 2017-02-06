@@ -17,58 +17,76 @@ Output Tables:
 AA_UC5_FORECAST_TBL
 AA_UC5_FORECAST_IMG_TBL
 
+Datastore:
+dsRF_payroll_store
 *********************************************************/
-
 BEGIN
 sys.rqScriptDrop('PAYROLLTS');
-sys.rqScriptCreate('PAYROLLTS','function(df,ds.name,is.seasonal,ts.measure.col,ts.time.col,ts.freq,forecast.period,is.window,start.win,end.win)
-                                {
-                                  # Import Library
-                                  library(fpp)
-                                  library(zoo)
-                                
-                                  # Converting ore.dataframe to R dataframe
-                                  payroll.ds <- ore.pull(df)
-                                  
-                                  # converting to Time Series
-                                   if(is.window == ''N'')
-                                   {
-                                    #payroll_ts <- ts(zoo(payroll.ds[,ts.measure.col], order.by=as.yearmon(payroll.ds[,ts.time.col])),frequency = ts.freq)
-                                    payroll_ts <- ts(payroll.ds[,ts.measure.col],frequency = ts.freq)
-                                   }
-                                   else{
-                                    payroll_ts <- ts(payroll.ds[,ts.measure.col],frequency = ts.freq,start = start.win,end = end.win)
-                                   }
-                                   
-                                   # Seasonal Plot
-                                   seasonplot(payroll_ts,ylab="AUD", xlab="Year", main="Seasonal plot: Payroll Cost",
-                                              year.labels=TRUE, year.labels.left=TRUE, col=1:20, pch=19)
-           
-                                  # Fitting into model to get the ARIMA(p,d,q)
-                                  fit <- auto.arima(payroll_ts,seasonal = is.seasonal)
-                                
-                                  # Accuracy of ARIMA
-                                  accuracy.arima <- accuracy(fit)
-                                  
-                                  # Time Series residuals Analysis
-                                  print(tsdisplay(residuals(fit)))
-                                  
-                                  # Forecasting
-                                  forecast.fit <- forecast(fit,h = forecast.period)                                  
-                                  plot(forecast.fit)
-                                  
-                                  if (nrow(ore.datastore(name=ds.name)) > 0 ) 
-                                  {
-                                    ore.delete(name = ds.name)
-                                  }
-                                  ore.save(fit,name = ds.name,append = TRUE)  
-                                  ore.save(forecast.fit,name = ds.name,append = TRUE)
-                                  ore.save(accuracy.arima,name = ds.name,append = TRUE)
-                                  
-                                  # Returning Foreast value
-                                  forecast.df <- data.frame(forecast.fit)
-                                  colnames(forecast.df) <- c("FORECAST","CONF_LO_80","CONF_HI_80","CONF_LO_95","CONF_HI_95")
-                                  forecast.df
-                                }'
+sys.rqScriptCreate('PAYROLLTS','function(df,ds.name,is.seasonal,ts.measure.col,ts.time.col,forecast.period,start.yr,end.yr,trend.win)
+                    {
+                      # Import Library
+                      library(fpp)
+                      library(zoo)
+                      
+                      # Converting ore.dataframe to R dataframe
+                      payroll.ds <- ore.pull(df)
+                      
+                      # converting to Time Series
+                      # Only frequency = 12 (Monthly)
+                      # Start Month = Jan and End Month = Dec
+                      payroll_ts <- ts(zoo(payroll.ds[,ts.measure.col], order.by=as.yearmon(payroll.ds[,ts.time.col])),frequency = 12,start = c(start.yr,1),end = c(end.yr,12))
+                    
+                      
+                      # Seasonal Plot
+                      ts.decompose <- stl(payroll_ts, t.window = trend.win, s.window = "periodic", robust = TRUE) 
+                      plot(ts.decompose)
+                      
+                      # Fitting into model to get the ARIMA(p,d,q)
+                      forecast.fit <- forecast(ts.decompose, h=forecast.period,
+                                     forecastfunction=function(x,h,level){
+                                       fit <- auto.arima(x,seasonal = is.seasonal)
+                                       return(forecast(fit,h=forecast.period,level=level))})
+                      
+                      # Storing the ARIMA Model
+                      arima.model <- forecast.fit$model
+                      arima.accuracy <- accuracy(arima.model)
+                      
+                      # Forecast Plot
+                      plot(forecast.fit)
+                      
+                      # Model Residual ACF to check the DWN Plot
+                      acf(resid(forecast.fit), na.action=na.omit, main = "ACF Residual Analysis")
+                      
+                      # Q-Q Plot
+                      qqnorm(resid(forecast.fit))
+                      qqline(resid(forecast.fit))
+                      
+                      # Unit-Box Test of the residual
+                      T <- length(payroll_ts)
+                      m <- 12 # Monthly
+                      
+                      # Non-seasonal TS
+                      h <- min(10,T/5)
+                      
+                      # Seasonal TS
+                      h <- min(2*m,T/5)
+                      
+                      unit.test <- Box.test(resid(forecast.fit), lag = h, type="Ljung-Box")                    
+                      
+                      # Time Series residuals Analysis 
+                      if (nrow(ore.datastore(name=ds.name)) > 0 ) 
+                      {
+                        ore.delete(name = ds.name)
+                      }
+                      ore.save(forecast.fit,name = ds.name,append = TRUE)
+                      ore.save(arima.model,name = ds.name,append = TRUE)
+                      ore.save(arima.accuracy,name = ds.name,append = TRUE)
+                      ore.save(unit.test,name = ds.name,append = TRUE)
+                      
+                      # Returning Foreast value
+                      forecast.df <- data.frame(forecast.fit)
+                      colnames(forecast.df) <- c("FORECAST","CONF_LO_80","CONF_HI_80","CONF_LO_95","CONF_HI_95")
+                      forecast.df
+                    }'
                   );
 END;
