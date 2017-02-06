@@ -56,11 +56,10 @@ AA_USECASE_ALGO_RUN_PKG.AA_UC5_PRC(p_sql => 'select YRMON,PAYROLL_COST from AA_P
            p_is_seasonal => 'T' ,
            p_ts_measure_col => 'PAYROLL_COST',
            p_ts_time_col => 'YRMON',
-           p_ts_freq => 12,
            p_forecast_period => 12 ,
-           p_is_window => 'N',
            p_start_win => 2011,
-           p_end_win => 2015);
+           p_end_win => 2015,
+           p_trend_win => 60);
 END;
 
 -- CHECK
