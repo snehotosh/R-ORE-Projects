@@ -1,3 +1,26 @@
+create or replace PACKAGE AA_TRAINING_DATA_PREP_PKG AS
+   /*  Employee Master */
+  PROCEDURE AA_EMP_MASTER_TMP_PRC(p_min_tenure NUMBER,p_max_perf_year NUMBER,p_min_perf_date VARCHAR2,out_status OUT NUMBER);
+  PROCEDURE AA_EMP_MASTER_CHURN_TMP_PRC(p_max_perf_year NUMBER,p_min_perf_year NUMBER,out_status OUT NUMBER);
+  PROCEDURE AA_EMP_MASTER_CHURN_UPD_PRC(out_status OUT NUMBER);
+   /*  Employee Compa ratio */
+  PROCEDURE AA_EMP_COMPA_TBL_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Department Change */  
+  PROCEDURE AA_EMP_DEPT_CHNG_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Performance Change */
+  PROCEDURE AA_EMP_PERFORMANCE_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Promotion Change */
+  PROCEDURE AA_EMP_PROMO_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Salary Revision */
+  PROCEDURE AA_EMP_SALREV_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Sick Leaves */
+  PROCEDURE AA_EMP_SICK_LEAVES_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Supervisor Change */
+  PROCEDURE AA_EMP_SUPERVISOR_PRC(p_start_year NUMBER,out_status OUT NUMBER);  
+     /*  Payroll Cost */
+  PROCEDURE AA_PAYROLL_COST_PRC(out_status OUT NUMBER); 
+  END AA_TRAINING_DATA_PREP_PKG;
+
 create or replace PACKAGE BODY AA_TRAINING_DATA_PREP_PKG AS
 /*******************************************************************************
 #1.Procedure for creating Employee Master Table
