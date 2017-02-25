@@ -959,3 +959,106 @@ PROCEDURE AA_EMP_MASTER_TMP_PRC(p_min_tenure NUMBER,p_max_perf_year NUMBER,p_min
           --dbms_output.put_line(SQLCODE(SQLERRM));
     END;
 END AA_TRAINING_DATA_PREP_PKG;
+
+// THIS IS THE FINAL PROCEDURE
+CREATE OR REPLACE PROCEDURE AA_TRAIN_DATA_RUN_PRC
+( PARAM_MIN_TENURE NUMBER,
+  PARAM_MAX_PERF_YEAR NUMBER,
+  PARAM_MIN_PERF_YEAR NUMBER,
+  PARAM_PERF_START_DT VARCHAR2,
+  PARAM_PERF_END_DT VARCHAR2,
+  PARAM_START_YEAR NUMBER,  
+  out_status_final OUT NUMBER
+) 
+IS
+   v_mas_tmp_status NUMBER:= -999;
+   v_mas_churn_tmp_status NUMBER:= -999; 
+   v_mas_upd_status NUMBER:= -999;
+   v_compa_status NUMBER:= -999; 
+   v_dept_chng_status NUMBER:= -999;
+   v_perf_status NUMBER:= -999; 
+   v_promo_status NUMBER:= -999; 
+   v_sal_rev_status NUMBER:= -999;
+   v_sick_lv_status NUMBER:= -999;
+   v_spvr_chng_status NUMBER:= -999;
+   v_payroll_status NUMBER:= -999; 
+   v_train_tab_status NUMBER:= -999; 
+   ex EXCEPTION;
+ BEGIN
+    AA_TRAINING_DATA_PREP_PKG.AA_EMP_MASTER_TMP_PRC
+    (p_min_tenure => PARAM_MIN_TENURE,
+     p_max_perf_year => PARAM_MAX_PERF_YEAR,
+     p_min_perf_date => PARAM_PERF_START_DT,
+     out_status => v_mas_tmp_status); 
+     
+    DBMS_OUTPUT.PUT_LINE('1.The output status:'||v_mas_tmp_status);
+
+    AA_TRAINING_DATA_PREP_PKG.AA_EMP_MASTER_CHURN_TMP_PRC
+    (p_max_perf_year => PARAM_MAX_PERF_YEAR,
+     p_min_perf_year => PARAM_MIN_PERF_YEAR,
+     out_status => v_mas_churn_tmp_status);
+    
+    DBMS_OUTPUT.PUT_LINE('2.The output status:'||v_mas_churn_tmp_status);
+
+    AA_TRAINING_DATA_PREP_PKG.AA_EMP_MASTER_CHURN_UPD_PRC(out_status => v_mas_upd_status);    
+    DBMS_OUTPUT.PUT_LINE('3.The output status:'||v_mas_upd_status);
+    
+    AA_TRAINING_DATA_PREP_PKG.AA_EMP_COMPA_TBL_PRC(p_start_year => PARAM_START_YEAR,out_status => v_compa_status);
+    DBMS_OUTPUT.PUT_LINE('4.The output status:'||v_compa_status);
+
+    AA_TRAINING_DATA_PREP_PKG.AA_EMP_DEPT_CHNG_PRC(p_start_year => PARAM_START_YEAR,out_status => v_dept_chng_status);
+    DBMS_OUTPUT.PUT_LINE('5.The output status:'||v_dept_chng_status);
+
+    AA_TRAINING_DATA_PREP_PKG.AA_EMP_PERFORMANCE_PRC(p_start_year => PARAM_START_YEAR,out_status => v_perf_status);
+    DBMS_OUTPUT.PUT_LINE('6.The output status:'||v_perf_status);
+
+    AA_TRAINING_DATA_PREP_PKG.AA_EMP_PROMO_PRC(p_start_year => PARAM_START_YEAR,out_status => v_promo_status);
+    DBMS_OUTPUT.PUT_LINE('7.The output status:'||v_promo_status);
+ 
+    AA_TRAINING_DATA_PREP_PKG.AA_EMP_SALREV_PRC(p_start_year => PARAM_START_YEAR,out_status => v_sal_rev_status);
+    DBMS_OUTPUT.PUT_LINE('8.The output status:'||v_sal_rev_status);
+ 
+    AA_TRAINING_DATA_PREP_PKG.AA_EMP_SICK_LEAVES_PRC(p_start_year => PARAM_START_YEAR,out_status => v_sick_lv_status);
+    DBMS_OUTPUT.PUT_LINE('9.The output status:'||v_sick_lv_status);
+
+    AA_TRAINING_DATA_PREP_PKG.AA_EMP_SUPERVISOR_PRC(p_start_year => PARAM_START_YEAR,out_status => v_spvr_chng_status);  
+    DBMS_OUTPUT.PUT_LINE('10.The output status:'||v_spvr_chng_status);
+
+    AA_TRAINING_DATA_PREP_PKG.AA_PAYROLL_COST_PRC(out_status => v_payroll_status); 
+    DBMS_OUTPUT.PUT_LINE('11.The output status:'||v_payroll_status);
+ 
+   /*************************************************************************  
+                          Main Training Table 
+    **************************************************************************/
+    IF 	v_mas_tmp_status = 1        AND
+        v_mas_churn_tmp_status = 1  AND
+        v_mas_upd_status = 1        AND
+        v_compa_status = 1          AND
+        v_dept_chng_status = 1      AND
+        v_perf_status = 1           AND
+        v_promo_status = 1          AND
+        v_sal_rev_status = 1        AND
+        v_sick_lv_status = 1        AND
+        v_spvr_chng_status = 1      AND
+        v_payroll_status = 1  
+      THEN          
+        AA_TRAINING_DATA_PREP_PKG.AA_COMMN_MDL_TRAIN_PRC
+        (p_perf_start_dt => PARAM_PERF_START_DT,
+         p_perf_end_dt => PARAM_PERF_END_DT,
+         out_status => v_train_tab_status); 
+        
+        DBMS_OUTPUT.PUT_LINE('12.The output status:'||v_train_tab_status);          
+        DBMS_OUTPUT.PUT_LINE('Successfully Executed!');
+        out_status_final:= 1;
+    ELSE
+      RAISE ex;
+    END IF;
+  EXCEPTION
+    WHEN ex THEN
+      DBMS_OUTPUT.PUT_LINE('Something went wrong.Please check!');
+      out_status_final:= 0;
+    WHEN OTHERS THEN
+      DBMS_OUTPUT.PUT_LINE('Something went wrong.Please check!');
+      out_status_final:= 0;  
+  END;
+
