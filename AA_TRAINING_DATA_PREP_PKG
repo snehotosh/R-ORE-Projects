@@ -19,9 +19,12 @@ create or replace PACKAGE AA_TRAINING_DATA_PREP_PKG AS
   PROCEDURE AA_EMP_SUPERVISOR_PRC(p_start_year NUMBER,out_status OUT NUMBER);  
      /*  Payroll Cost */
   PROCEDURE AA_PAYROLL_COST_PRC(out_status OUT NUMBER); 
+  /* Main Train Table */
+  PROCEDURE AA_COMMN_MDL_TRAIN_PRC(p_perf_start_dt VARCHAR2,p_perf_end_dt VARCHAR2,out_status OUT NUMBER);
   END AA_TRAINING_DATA_PREP_PKG;
-
-create or replace PACKAGE BODY AA_TRAINING_DATA_PREP_PKG AS
+  
+    
+  create or replace PACKAGE BODY AA_TRAINING_DATA_PREP_PKG AS
 /*******************************************************************************
 #1.Procedure for creating Employee Master Table
 ********************************************************************************/
@@ -772,6 +775,177 @@ PROCEDURE AA_EMP_MASTER_TMP_PRC(p_min_tenure NUMBER,p_max_perf_year NUMBER,p_min
                   group by T531732.CAL_YEAR,T531732.CAL_MONTH, T531732.PER_NAME_MONTH
                   order by T531732.CAL_YEAR,T531732.CAL_MONTH, T531732.PER_NAME_MONTH;
                     
+        IF SQL%ROWCOUNT > 0 THEN
+          dbms_output.put_line('Records Inserted into AA_PAYROLL_COST_TBL are:'||sql%ROWCOUNT);
+          COMMIT;
+        ELSE 
+          ROLLBACK;
+        END IF;
+        out_status:=1; /* Shows Success */  
+    EXCEPTION        
+        WHEN OTHERS THEN
+          out_status:=0; /* Shows Fail */
+          --dbms_output.put_line(SQLCODE(SQLERRM));
+    END;
+    
+    /*******************************************************************************
+    #11.Procedure for creating THE COMMON Main Training Table
+    ********************************************************************************/
+    PROCEDURE  AA_COMMN_MDL_TRAIN_PRC(p_perf_start_dt VARCHAR2,p_perf_end_dt VARCHAR2,out_status OUT NUMBER) IS
+      v_count number:=0;
+    BEGIN
+          /* Checking Whether table is empty or not */
+          select count(*) into v_count from AA_COMMN_MDL_TRAIN_TBL;
+          
+          IF v_count > 0 then
+            EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_COMMN_MDL_TRAIN_TBL';
+          END IF;
+    
+          /* Inserting Data into AA_EMP_MASTER_TMP_TEST_TBL */     
+              INSERT INTO AA_COMMN_MDL_TRAIN_TBL
+                  WITH qry as
+                  (
+                  select distinct 
+                  m.EMPID as EMPID,                                                                                                                                                                             
+                  m.NATIONALITY as NATIONALITY,                                                                                                                                                                           
+                  m.ENAME as ENAME,                                                                                                                                                            
+                  m.GENDER as GENDER,                                                                                                                                                                            
+                  m.AGE as AGE,
+                  (CASE 
+                  WHEN (m.AGE < 20) then 'AGE_BAND_1'
+                  WHEN (m.AGE >=20 and m.AGE < 30) then 'AGE_BAND_2'
+                  WHEN (m.AGE >=30 and m.AGE < 40) then 'AGE_BAND_3'
+                  WHEN (m.AGE >=40 and m.AGE < 50) then 'AGE_BAND_4'
+                  WHEN (m.AGE >=50 and m.AGE < 60) then 'AGE_BAND_5'
+                  WHEN (m.AGE >=60) then 'AGE_BAND_6' END) as AGE_BAND, 
+                  m.MARITAL_STATUS as MARITAL_STATUS,                                                                                                                                                                     
+                  m.EDUCATION as EDUCATION,                                                                                                                                                                    
+                  m.DISABLED_FLG as DISABLED_FLG,                                                                                                                                                                
+                  m.DEPTNO as DEPTNO,                                                                                                                                                                           
+                  m.DEPT_NAME as CURR_DEPT_NAME,                                                                                                                                                                            
+                  m.ORIG_HIRE_DT as ORIG_HIRE_DT,                                                                                                                                                                                
+                  m.LAST_WORKED_DT as LAST_WORKED_DT,                                                                                                                                      
+                  nvl(m.TENURE,0) as TENURE,            
+                  (CASE 
+                  WHEN (nvl(m.TENURE,0) < 1) then 'TENURE_BAND_1' 
+                  WHEN (nvl(m.TENURE,0) >=1 and nvl(m.TENURE,0) < 2) then 'TENURE_BAND_2'
+                  WHEN (nvl(m.TENURE,0) >=2 and nvl(m.TENURE,0) < 5) then 'TENURE_BAND_3'
+                  WHEN (nvl(m.TENURE,0) >=5 and nvl(m.TENURE,0) < 10) then 'TENURE_BAND_4'
+                  WHEN (nvl(m.TENURE,0) >=10 and nvl(m.TENURE,0) < 15) then 'TENURE_BAND_5'
+                  WHEN (nvl(m.TENURE,0) >=15 and nvl(m.TENURE,0) < 20) then 'TENURE_BAND_6'
+                  WHEN (nvl(m.TENURE,0) >=20) then 'TENURE_BAND_7' ELSE 'NO_MATCH' END) as TENURE_BAND, 
+                  m.JOB_NAME as JOB_NAME, 
+                  nvl(t7.COMPA_Y1,0) as COMPA_YR1,
+                  nvl(t7.COMPA_Y2,0) as COMPA_YR2,
+                  nvl(t7.COMPA_Y3,0) as COMPA_YR3,
+                  nvl(t7.COMPA_Y4,0) as COMPA_YR4,
+                  ROUND((nvl(t7.COMPA_Y4,0) - nvl(t7.COMPA_Y1,0))/decode(nvl(t7.COMPA_Y1,0),0,1,nvl(t7.COMPA_Y1,0)),2) as CHNG_COMPA_L4Y,
+                  ROUND((nvl(t7.COMPA_Y4,0) - nvl(t7.COMPA_Y3,0))/decode(nvl(t7.COMPA_Y3,0),0,1,nvl(t7.COMPA_Y3,0)),2) as CHNG_COMPA_LY,
+                  (CASE 
+                  WHEN SIGN(nvl(t7.COMPA_Y4,0) - nvl(t7.COMPA_Y1,0)) = -1 THEN 'DECREASED' 
+                  WHEN SIGN(nvl(t7.COMPA_Y4,0) - nvl(t7.COMPA_Y1,0)) = 1 THEN 'INCREASED'
+                  ELSE 'SAME' END) AS CHNG_DIR_COMPA_L4Y,
+                  (CASE 
+                  WHEN SIGN(nvl(t7.COMPA_Y4,0) - nvl(t7.COMPA_Y3,0)) = -1 THEN 'DECREASED' 
+                  WHEN SIGN(nvl(t7.COMPA_Y4,0) - nvl(t7.COMPA_Y3,0)) = 1 THEN 'INCREASED'
+                  ELSE 'SAME' END) AS CHNG_DIR_COMPA_LY,
+                  (CASE 
+                  WHEN (nvl(t7.COMPA_Y1,0) < 70) THEN 'COMPA_BAND_1'
+                  WHEN (nvl(t7.COMPA_Y1,0) >= 70 AND nvl(t7.COMPA_Y1,0) < 80)  THEN 'COMPA_BAND_2'
+                  WHEN (nvl(t7.COMPA_Y1,0) >= 80 AND nvl(t7.COMPA_Y1,0) < 90)  THEN 'COMPA_BAND_3'
+                  WHEN (nvl(t7.COMPA_Y1,0) >= 90 AND nvl(t7.COMPA_Y1,0) < 100)  THEN 'COMPA_BAND_4'
+                  WHEN (nvl(t7.COMPA_Y1,0) >= 100 AND nvl(t7.COMPA_Y1,0) < 110)  THEN 'COMPA_BAND_5'
+                  WHEN (nvl(t7.COMPA_Y1,0) >= 110 AND nvl(t7.COMPA_Y1,0) < 120)  THEN 'COMPA_BAND_6'
+                  WHEN (nvl(t7.COMPA_Y1,0) >= 120)  THEN 'COMPA_BAND_7' ELSE 'NO_MATCH' END) as COMPA_BAND_YR1,
+                  (CASE 
+                  WHEN (nvl(t7.COMPA_Y2,0) < 70) THEN 'COMPA_BAND_1'
+                  WHEN (nvl(t7.COMPA_Y2,0) >= 70 AND nvl(t7.COMPA_Y2,0) < 80)  THEN 'COMPA_BAND_2'
+                  WHEN (nvl(t7.COMPA_Y2,0) >= 80 AND nvl(t7.COMPA_Y2,0) < 90)  THEN 'COMPA_BAND_3'
+                  WHEN (nvl(t7.COMPA_Y2,0) >= 90 AND nvl(t7.COMPA_Y2,0) < 100)  THEN 'COMPA_BAND_4'
+                  WHEN (nvl(t7.COMPA_Y2,0) >= 100 AND nvl(t7.COMPA_Y2,0) < 110)  THEN 'COMPA_BAND_5'
+                  WHEN (nvl(t7.COMPA_Y2,0) >= 110 AND nvl(t7.COMPA_Y2,0) < 120)  THEN 'COMPA_BAND_6'
+                  WHEN (nvl(t7.COMPA_Y2,0) >= 120)  THEN 'COMPA_BAND_7' ELSE 'NO_MATCH' END) as COMPA_BAND_YR2,
+                  (CASE 
+                  WHEN (nvl(t7.COMPA_Y3,0) < 70) THEN 'COMPA_BAND_1'
+                  WHEN (nvl(t7.COMPA_Y3,0) >= 70 AND nvl(t7.COMPA_Y3,0) < 80)  THEN 'COMPA_BAND_2'
+                  WHEN (nvl(t7.COMPA_Y3,0) >= 80 AND nvl(t7.COMPA_Y3,0) < 90)  THEN 'COMPA_BAND_3'
+                  WHEN (nvl(t7.COMPA_Y3,0) >= 90 AND nvl(t7.COMPA_Y3,0) < 100)  THEN 'COMPA_BAND_4'
+                  WHEN (nvl(t7.COMPA_Y3,0) >= 100 AND nvl(t7.COMPA_Y3,0) < 110)  THEN 'COMPA_BAND_5'
+                  WHEN (nvl(t7.COMPA_Y3,0) >= 110 AND nvl(t7.COMPA_Y3,0) < 120)  THEN 'COMPA_BAND_6'
+                  WHEN (nvl(t7.COMPA_Y3,0) >= 120)  THEN 'COMPA_BAND_7' ELSE 'NO_MATCH' END) as COMPA_BAND_YR3,
+                  (CASE 
+                  WHEN (nvl(t7.COMPA_Y4,0) < 70) THEN 'COMPA_BAND_1'
+                  WHEN (nvl(t7.COMPA_Y4,0) >= 70 AND nvl(t7.COMPA_Y4,0) < 80)  THEN 'COMPA_BAND_2'
+                  WHEN (nvl(t7.COMPA_Y4,0) >= 80 AND nvl(t7.COMPA_Y4,0) < 90)  THEN 'COMPA_BAND_3'
+                  WHEN (nvl(t7.COMPA_Y4,0) >= 90 AND nvl(t7.COMPA_Y4,0) < 100)  THEN 'COMPA_BAND_4'
+                  WHEN (nvl(t7.COMPA_Y4,0) >= 100 AND nvl(t7.COMPA_Y4,0) < 110)  THEN 'COMPA_BAND_5'
+                  WHEN (nvl(t7.COMPA_Y4,0) >= 110 AND nvl(t7.COMPA_Y4,0) < 120)  THEN 'COMPA_BAND_6'
+                  WHEN (nvl(t7.COMPA_Y4,0) >= 120)  THEN 'COMPA_BAND_7' ELSE 'NO_MATCH' END) as COMPA_BAND_YR4,
+                  nvl(t2.PR_Y1,0) as PERF_YR1,                                                                                                                                                                                     
+                  nvl(t2.PR_Y2,0) as PERF_YR2,                                                                                                                                                                                       
+                  nvl(t2.PR_Y3,0) as PERF_YR3,                                                                                                                                                                                       
+                  nvl(t2.PR_Y4,0) as PERF_YR4,
+                  (nvl(t2.PR_Y1,0) + nvl(t2.PR_Y2,0) + nvl(t2.PR_Y3,0) + nvl(t2.PR_Y4,0))/4 as AVG_PERF_L4Y,
+                  (nvl(t2.PR_Y1,0)*0.1 + nvl(t2.PR_Y2,0)*0.2 + nvl(t2.PR_Y3,0)*0.3 + nvl(t2.PR_Y4,0)*0.4) as WT_AVG_PERF_L4Y,
+                  'PR_'||nvl(t2.PR_Y1,0) as PERF_BAND_YR1,                                                                                                                                                                                     
+                  'PR_'||nvl(t2.PR_Y2,0) as PERF_BAND_YR2,                                                                                                                                                                                       
+                  'PR_'||nvl(t2.PR_Y3,0) as PERF_BAND_YR3,                                                                                                                                                                                       
+                  'PR_'||nvl(t2.PR_Y4,0) as PERF_BAND_YR4,
+                  nvl(t3.SICKLV_Y1,0) as SICKLV_YR1,                                                                                                                                                                                  
+                  nvl(t3.SICKLV_Y2,0) as SICKLV_YR2,                                                                                                                                                                                    
+                  nvl(t3.SICKLV_Y3,0) as SICKLV_YR3,                                                                                                                                                                                         
+                  nvl(t3.SICKLV_Y4,0) as SICKLV_YR4, 
+                  (nvl(t3.SICKLV_Y1,0) + nvl(t3.SICKLV_Y2,0) + nvl(t3.SICKLV_Y3,0) + nvl(t3.SICKLV_Y4,0))/4 as AVG_SICKLV_L4Y,
+                  ROUND((nvl(t3.SICKLV_Y4,0) - nvl(t3.SICKLV_Y1,0))/decode(nvl(t3.SICKLV_Y1,0),0,1,nvl(t3.SICKLV_Y1,0)),2) as CHNG_SICKLV_L4Y,
+                  ROUND((nvl(t3.SICKLV_Y4,0) - nvl(t3.SICKLV_Y3,0))/decode(nvl(t3.SICKLV_Y3,0),0,1,nvl(t3.SICKLV_Y3,0)),2) as CHNG_SICKLV_LY,                  
+                  (CASE 
+                  WHEN SIGN(nvl(t3.SICKLV_Y4,0) - nvl(t3.SICKLV_Y1,0)) = -1 THEN 'DECREASED' 
+                  WHEN SIGN(nvl(t3.SICKLV_Y4,0) - nvl(t3.SICKLV_Y1,0)) = 1 THEN 'INCREASED'
+                  ELSE 'SAME' END) AS CHNG_DIR_SICKLV_L4Y,
+                  (CASE 
+                  WHEN SIGN(nvl(t3.SICKLV_Y4,0) - nvl(t3.SICKLV_Y3,0)) = -1 THEN 'DECREASED' 
+                  WHEN SIGN(nvl(t3.SICKLV_Y4,0) - nvl(t3.SICKLV_Y3,0)) = 1 THEN 'INCREASED'
+                  ELSE 'SAME' END) AS CHNG_DIR_SICKLV_LY,
+                  nvl(t1.NO_OF_DEPT_CNG_L4Y,0) as DEPT_CHNG_L4Y,
+                  nvl(t4.NO_OF_PROMOTION_L4Y,0) as PROMO_L4Y,
+                  nvl(t6.NO_OF_SALREV_L4Y,0) as SALREV_L4Y,
+                  nvl(t5.NO_OF_SVR_CHNG_L4Y,0) as SVR_CHNG_L4Y,
+                  m.ISCHURN as ISCHURN,                  
+                  (CASE 
+                  WHEN nvl(t2.PR_Y5,0) <= 3 THEN 'RATING <=3'
+                  WHEN nvl(t2.PR_Y5,0) > 3 THEN 'RATING >3'
+                  END) as PERF_CATEG1,
+                  (CASE 
+                  WHEN nvl(t2.PR_Y5,0) IN (0,1) THEN 'POOR-PERFORMER'
+                  WHEN nvl(t2.PR_Y5,0) = 2 THEN 'INCONSISTENT'
+                  WHEN nvl(t2.PR_Y5,0) = 3 THEN 'MEETS-EXPECTATION'
+                  WHEN nvl(t2.PR_Y5,0) = 4 THEN 'EXCELLENT'
+                  WHEN nvl(t2.PR_Y5,0) = 5 THEN 'EXCEPTIONAL'
+                  END) as PERF_CATEG2,
+                  (CASE 
+                  WHEN (nvl(t2.PR_Y5,0) = 4 OR nvl(t2.PR_Y5,0) = 5) AND 
+                       (nvl(t2.PR_Y4,0) = 4 OR nvl(t2.PR_Y4,0) = 5 OR nvl(t2.PR_Y4,0) = 0) AND 
+                       (nvl(t2.PR_Y3,0) = 4 OR nvl(t2.PR_Y3,0) = 5 OR nvl(t2.PR_Y3,0) = 0) THEN 'TOP-PERFORMER'
+                  WHEN (nvl(t2.PR_Y5,0) = 1 OR nvl(t2.PR_Y5,0) = 2) AND 
+                       (nvl(t2.PR_Y4,0) = 1 OR nvl(t2.PR_Y4,0) = 2) THEN 'POOR-PERFORMER'
+                  ELSE 'OTHERS' END) as PERF_CATEG3
+                  FROM
+                  (select * from AA_EMP_MASTER_TBL where 
+                  (last_worked_dt between to_date(p_perf_start_dt) and to_date(p_perf_end_dt)) OR last_worked_dt is null) m /* Employee Master Table */
+                  LEFT OUTER JOIN AA_EMP_DEPT_CHNG_TBL t1   ON m.empid = t1.empid   /* Dept Change Table */
+                  LEFT OUTER JOIN AA_EMP_PERFORMANCE_TBL t2 ON m.empid = t2.empid /* Peformance Rating Table */
+                  LEFT OUTER JOIN AA_EMP_SICK_LEAVES_TBL t3 ON m.empid = t3.empid /* Sick Leaves Table */
+                  LEFT OUTER JOIN AA_EMP_PROMO_TBL t4       ON m.empid = t4.empid /* Promotion Table */
+                  LEFT OUTER JOIN AA_EMP_SUPERVISOR_TBL t5  ON m.empid = t5.empid  /* Supervisor change Table */
+                  LEFT OUTER JOIN AA_EMP_SALREV_TBL t6      ON m.empid = t6.empid  /* Salary Revision Table */
+                  LEFT OUTER JOIN AA_EMP_COMPA_TBL t7       ON m.empid = t7.empid  /* Compa Ratio Table */
+                  )
+                  SELECT * FROM qry
+                  WHERE 
+                  (NATIONALITY is not null) OR (GENDER is not null) OR
+                  (AGE is not null) OR (MARITAL_STATUS is not null) OR
+                  (EDUCATION is not null) OR (DISABLED_FLG is not null);
+        
         IF SQL%ROWCOUNT > 0 THEN
           dbms_output.put_line('Records Inserted into AA_PAYROLL_COST_TBL are:'||sql%ROWCOUNT);
           COMMIT;
