@@ -148,3 +148,17 @@ Training data preparation RUN anonymous Blocks
  select count(*) from AA_PAYROLL_COST_TBL; 
  -- Before run:  71
  -- After run:   71
+
+   /*************************************************************************  
+                          Main Training Table - OK TESTED
+  **************************************************************************/
+ DECLARE
+   v_train_tab_status NUMBER; 
+ BEGIN
+  AA_TRAINING_DATA_PREP_PKG.AA_COMMN_MDL_TRAIN_PRC(p_perf_start_dt => '01-JAN-2015',p_perf_end_dt => '31-DEC-2016',out_status => v_train_tab_status); 
+  DBMS_OUTPUT.PUT_LINE('The output status:'||v_train_tab_status);
+ END;
+ 
+  select count(*) from AA_COMMN_MDL_TRAIN_TBL; 
+ -- Before run:  4463
+ -- After run:   4463
