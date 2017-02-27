@@ -1,7 +1,29 @@
-/* Algorithm Block */
+create or replace PACKAGE AA_USECASE_ALGO_LIB_PKG AS
+/********************************************************* 
+Usecase 1 - Employee Attrition Training - TESTED OK
+Author: Snehotosh Banerjee
+Date: 20/01/2017
 
-create or replace PACKAGE AA_USECASE_ALGO_RUN_PKG AS
-  /* Usecase 1 - Attrition Prediction Model Training */
+ORE Script Name:
+	CLASSRFCHURN
+	
+Packages:
+	randomForest # RandomForest Algorithm
+	caTools      # For Data Split
+	ROCR	       # Visualizing classifier performance in R
+	ggplot2      # Visualization
+	DMwR	       # SMOTE for Rare class Balancing
+	
+Algorithm:
+	RandomForest 
+	
+Output Tables:
+	AA_UC1_MDL_METRICS_TBL
+	AA_UC1_MDL_IMG_TBL
+
+ORE datastore:
+  dsRF_churn_store	
+*********************************************************/
   PROCEDURE AA_UC1_TRAIN_PRC(p_sql VARCHAR2,
                                                p_is_bal_reqd VARCHAR2,
                                                p_perc_os NUMBER,
@@ -9,7 +31,31 @@ create or replace PACKAGE AA_USECASE_ALGO_RUN_PKG AS
                                                p_trn_ratio NUMBER,
                                                p_tgt_class_label VARCHAR2);
                                                
-  /* Usecase 1 - Employee Performance Model Training */
+/*********************************************************
+Usecase 2 - Employee Performance Training - TESTED OK
+Author: Snehotosh Banerjee
+Date: 20/01/2017
+
+ORE Script Name:
+	CLASSRFCHURN
+	
+Packages:
+	randomForest # RandomForest Algorithm
+	caTools      # For Data Split
+	ROCR	     # Visualizing classifier performance in R
+	ggplot2      # Visualization
+	DMwR	     # SMOTE for Rare class Balancing
+	
+Algorithm:
+	RandomForest 
+	
+Output Tables:
+	AA_UC2_MDL_METRICS_TBL
+	AA_UC2_MDL_IMG_TBL
+
+ORE Datastore:
+  dsRF_perf_store
+**********************************************************/
   PROCEDURE AA_UC2_TRAIN_PRC(p_sql VARCHAR2,
                                                p_is_bal_reqd VARCHAR2,
                                                p_perc_os NUMBER,
@@ -17,8 +63,60 @@ create or replace PACKAGE AA_USECASE_ALGO_RUN_PKG AS
                                                p_trn_ratio NUMBER,
                                                p_tgt_class_label VARCHAR2);                                             
   
-  /* Usecase 1 - Employee Data Profiling */
-  PROCEDURE AA_UC3_PRC(p_isDendoReqd VARCHAR2);
+/*********************************************************
+Usecase 3 - Employee Profiling - TESTED OK
+Author: Snehotosh Banerjee
+Date: 20/01/2017
+
+ORE Script Name:
+	CLUSTPROFILE
+	
+Packages:
+	cluster # for gower similarity and pam
+	Rtsne   # for t-SNE plot for Visualization
+	dplyr	  # Data wrangling
+	ggplot2 # Visualization
+	
+Algorithm:
+	PAM (Partition Around Medoids)
+	
+Output Tables:
+	AA_UC3_PNG_TBL
+	AA_UC3SUMMARY_CLUS2_TBL (Dynamic)
+	AA_UC3SUMMARY_CLUS1_TBL (Dynamic)
+	AA_UC3CLUS_REPRE_TBL
+	AA_UC3CLUS_INFO_TBL
+	AA_UC3CLUS_ASSIGNMENT_TBL
+
+ORE Datastore:
+  ds_cluster_store
+*********************************************************/
+  PROCEDURE AA_UC3_PRC(p_sql VARCHAR2,p_isDendoReqd VARCHAR2);
+  
+/*********************************************************
+Usecase 5 - Forecasting Payroll Cost - TESTED OK
+Author: Snehotosh Banerjee
+Date: 27/01/2017
+
+ORE Script Name:
+	PAYROLLTS
+	
+Packages:
+	fpp # Forecasting
+	zoo # Timeseries
+	
+Algorithm:
+	auto.arima
+  forecast
+  stl (Seasonal Decomposition by Loess)
+  
+Output Tables:
+  AA_UC5_FORECAST_TBL
+  AA_UC5_FORECAST_IMG_TBL
+
+Datastore:
+  dsRF_payroll_store
+*********************************************************/
   PROCEDURE AA_UC5_PRC(p_sql VARCHAR2,
                                         p_is_seasonal VARCHAR2,
                                         p_ts_measure_col VARCHAR2,
@@ -27,10 +125,11 @@ create or replace PACKAGE AA_USECASE_ALGO_RUN_PKG AS
                                         p_start_win NUMBER,
                                         p_end_win NUMBER,
                                         p_trend_win NUMBER);
-END AA_USECASE_ALGO_RUN_PKG;
+ 
+END AA_USECASE_ALGO_LIB_PKG;
 
-create or replace
-PACKAGE BODY AA_USECASE_ALGO_RUN_PKG AS
+
+create or replace PACKAGE BODY AA_USECASE_ALGO_LIB_PKG AS
             PROCEDURE AA_UC1_TRAIN_PRC(p_sql VARCHAR2,
                                                          p_is_bal_reqd VARCHAR2,
                                                          p_perc_os NUMBER,
@@ -181,12 +280,12 @@ PACKAGE BODY AA_USECASE_ALGO_RUN_PKG AS
                                  '''');
             END;
 
-            PROCEDURE AA_UC3_PRC(p_isDendoReqd VARCHAR2) IS
+            PROCEDURE AA_UC3_PRC(p_sql VARCHAR2, p_isDendoReqd VARCHAR2) IS
                 sql_stmt varchar2(6000);
                 sql_drop_stmt varchar2(4000);
                 v_count NUMBER:=0;
                 v_tgt_tab_name VARCHAR2(30):='AA_UC3_PNG_TBL';
-                v_src_tab_name VARCHAR2(30):='AA_CLUS_TRAIN_TBL';    
+                --v_src_tab_name VARCHAR2(30):='AA_CLUS_TRAIN_TBL';    
                 ex EXCEPTION;
             BEGIN
                     /*
@@ -212,18 +311,19 @@ PACKAGE BODY AA_USECASE_ALGO_RUN_PKG AS
                     */        
                     IF v_count > 0 THEN
                         execute immediate sql_drop_stmt;
-                    ELSE        
-                        sql_stmt:='CREATE TABLE '||v_tgt_tab_name||' AS
+                    END IF;        
+                        
+                    sql_stmt:='CREATE TABLE '||v_tgt_tab_name||' AS
                                    select * from table(rqTableEval(
-                                   cursor(select * from '||v_src_tab_name||'),                    
+                                   cursor('|| p_sql ||'),                    
                                    cursor(select 1 as "ore.connect",'''|| p_isDendoReqd ||''' as "isDendo",''ds_cluster_store'' "ds.name" from dual),
                                    ''PNG'',
                                    ''CLUSTPROFILE''))';
                                    
-                        dbms_output.enable(100000);
-                        dbms_output.put_line(sql_stmt);
-                        execute immediate sql_stmt;
-                    END IF;
+                    --dbms_output.enable(100000);
+                    --dbms_output.put_line(sql_stmt);
+                    execute immediate sql_stmt;
+                   
             EXCEPTION
               when ex then
                   DBMS_OUTPUT.PUT_LINE('I am in exception');
@@ -310,5 +410,5 @@ PACKAGE BODY AA_USECASE_ALGO_RUN_PKG AS
                                        ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
                                        ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
                                        '''');
-                  END;
+                  END;  
 END;
