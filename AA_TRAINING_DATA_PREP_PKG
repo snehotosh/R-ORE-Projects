@@ -942,9 +942,9 @@ PROCEDURE AA_EMP_MASTER_TMP_PRC(p_min_tenure NUMBER,p_max_perf_year NUMBER,p_min
                   )
                   SELECT * FROM qry
                   WHERE 
-                  (NATIONALITY is not null) OR (GENDER is not null) OR
-                  (AGE is not null) OR (MARITAL_STATUS is not null) OR
-                  (EDUCATION is not null) OR (DISABLED_FLG is not null);
+                  (NATIONALITY is not null) AND (GENDER is not null) AND
+                  (AGE is not null) AND (MARITAL_STATUS is not null) AND
+                  ((EDUCATION is not null) OR (DISABLED_FLG is not null));
         
         IF SQL%ROWCOUNT > 0 THEN
           dbms_output.put_line('Records Inserted into AA_PAYROLL_COST_TBL are:'||sql%ROWCOUNT);
