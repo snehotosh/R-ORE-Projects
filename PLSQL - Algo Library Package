@@ -93,7 +93,15 @@ ORE Datastore:
 *********************************************************/
   PROCEDURE AA_UC3_PRC(p_sql VARCHAR2,p_isDendoReqd VARCHAR2);
   
+  PROCEDURE AA_UC4_TRAIN_PRC(p_sql VARCHAR2,
+                                                         p_is_bal_reqd VARCHAR2,
+                                                         p_perc_os NUMBER,
+                                                         p_perc_us NUMBER,
+                                                         p_trn_ratio NUMBER,
+                                                         p_tgt_class_label VARCHAR2);
+  
 /*********************************************************
+
 Usecase 5 - Forecasting Payroll Cost - TESTED OK
 Author: Snehotosh Banerjee
 Date: 27/01/2017
@@ -125,9 +133,15 @@ Datastore:
                                         p_start_win NUMBER,
                                         p_end_win NUMBER,
                                         p_trend_win NUMBER);
- 
-END AA_USECASE_ALGO_LIB_PKG;
+                                        
+/* 
+  Prediction on trained Model
+  Applicable to all classification problems
+*/
 
+PROCEDURE AA_PREDICTION_PRC(p_test_sql VARCHAR2,p_train_tab_name VARCHAR2,p_ds_name VARCHAR2,p_out_table_name VARCHAR2);
+                            
+END AA_USECASE_ALGO_LIB_PKG;
 
 create or replace PACKAGE BODY AA_USECASE_ALGO_LIB_PKG AS
             PROCEDURE AA_UC1_TRAIN_PRC(p_sql VARCHAR2,
@@ -334,6 +348,81 @@ create or replace PACKAGE BODY AA_USECASE_ALGO_LIB_PKG AS
                                  '''');
             END;
             
+            PROCEDURE AA_UC4_TRAIN_PRC(p_sql VARCHAR2,
+                                                         p_is_bal_reqd VARCHAR2,
+                                                         p_perc_os NUMBER,
+                                                         p_perc_us NUMBER,
+                                                         p_trn_ratio NUMBER,
+                                                         p_tgt_class_label VARCHAR2) IS
+                sql_stmt varchar2(6000);
+                sql_img_stmt varchar2(6000);
+                sql_drop_stmt varchar2(4000);
+                sql_drop_img_stmt varchar2(4000);
+                v_count1 NUMBER:=0;
+                v_count2 NUMBER:=0;
+                v_tgt_metric_tab VARCHAR2(30):='AA_UC4_MDL_METRICS_TBL';   
+                v_tgt_img_tab VARCHAR2(30):='AA_UC4_MDL_IMG_TBL';
+                ex EXCEPTION;
+            BEGIN
+                    /*
+                      Target table drop code
+                    */
+                    sql_drop_stmt:= 'DROP TABLE '||v_tgt_metric_tab;
+                    sql_drop_img_stmt:= 'DROP TABLE '||v_tgt_img_tab;
+                    
+                    /*
+                      Checking whether table exists
+                    */
+                    select count(*) INTO v_count1 from user_tables where table_name = v_tgt_metric_tab;
+                    select count(*) INTO v_count2 from user_tables where table_name = v_tgt_img_tab;
+            
+                    /* Checking whether table exists */
+                    IF v_count1 > 0 THEN
+                        execute immediate sql_drop_stmt;
+                    END IF;
+                    
+                    IF v_count2 > 0 THEN
+                        execute immediate sql_drop_img_stmt;
+                    END IF;
+                    
+                    /* Calling Oracle R Embedded Script for Metric */
+                    sql_stmt:= 'CREATE TABLE '||v_tgt_metric_tab||' 
+                                AS
+                                SELECT * FROM TABLE(rqTableEval(
+                                cursor('|| p_sql ||'),
+                                cursor(select 1 as "ore.connect",'||p_perc_os||' "perc_over",'||p_perc_us||' "perc_under",20 "kn",
+                                '''||p_is_bal_reqd||''' "isR",'||p_trn_ratio||' "p_spltratio",'''||p_tgt_class_label||''' "prim_class_label",
+                                ''HR_STATUS'' "pY" ,''mean'' "p_imputetype",''dsRF_Recruitment_store'' "ds.name" from dual),
+                                ''select CAST(1 as VARCHAR2(20)) METRIC, 1 SCORE from dual'',
+                                ''CLASSRFCHURN''))';
+                    
+                    /* Calling Oracle R Embedded Script for Charts */
+                    sql_img_stmt:= 'CREATE TABLE '||v_tgt_img_tab||' 
+                                    AS
+                                    SELECT * FROM TABLE(rqTableEval(
+                                    cursor('|| p_sql ||'),
+                                    cursor(select 1 as "ore.connect",'||p_perc_os||' "perc_over",'||p_perc_us||' "perc_under",20 "kn",
+                                    '''||p_is_bal_reqd||''' "isR",'||p_trn_ratio||' "p_spltratio",'''||p_tgt_class_label||''' "prim_class_label",
+                                    ''HR_STATUS'' "pY" ,''mean'' "p_imputetype",''dsRF_Recruitment_store'' "ds.name" from dual),
+                                    ''PNG'',
+                                    ''CLASSRFCHURN''))';
+                    
+                    dbms_output.enable(100000);
+                    dbms_output.put_line(sql_stmt);  
+                    
+                    /* Executing the statement for building table */
+                    execute immediate sql_stmt; 
+                    execute immediate sql_img_stmt; 
+            EXCEPTION
+              when ex then
+                  DBMS_OUTPUT.PUT_LINE('I am in exception');
+              when others then
+                  DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                                 ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                                 ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                                 '''');
+            END;
+            
             PROCEDURE AA_UC5_PRC(p_sql VARCHAR2,
                                         p_is_seasonal VARCHAR2,
                                         p_ts_measure_col VARCHAR2,
@@ -402,6 +491,55 @@ create or replace PACKAGE BODY AA_USECASE_ALGO_LIB_PKG AS
                           /* Executing the statement for building table */
                           execute immediate sql_stmt; 
                           execute immediate sql_img_stmt; 
+                  EXCEPTION
+                    when ex then
+                        DBMS_OUTPUT.PUT_LINE('I am in exception');
+                    when others then
+                        DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                                       ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                                       ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                                       '''');
+                  END;  
+                  
+  /*
+    Prediction
+  */
+  
+  PROCEDURE AA_PREDICTION_PRC(p_test_sql VARCHAR2,p_train_tab_name VARCHAR2,p_ds_name VARCHAR2,p_out_table_name VARCHAR2)
+  IS
+                      sql_stmt varchar2(6000);
+                      sql_drop_stmt varchar2(4000);
+                      v_count NUMBER:=0;
+                      ex EXCEPTION;
+                  BEGIN
+                          /*
+                            Target prediction table drop code
+                          */
+                          sql_drop_stmt:= 'DROP TABLE '||p_out_table_name;                          
+
+                          /*
+                            Checking whether target prediction table exists
+                          */
+                          select count(*) INTO v_count from user_tables where table_name = p_out_table_name;                          
+
+                          /* Checking whether table exists */
+                          IF v_count > 0 THEN
+                              execute immediate sql_drop_stmt;
+                          END IF;      
+  
+
+                          /* Calling Oracle R Embedded Script for Metric */
+                          sql_stmt:= 'CREATE TABLE '||p_out_table_name||' 
+                                      SELECT * FROM
+                                      table(rqTableEval(
+                                                cursor('|| p_test_sql ||'),
+                                                cursor(select '''|| p_ds_name ||''' "datastore_name",'''|| p_train_tab_name ||''' 1 "ore.connect" from dual),
+                                                ''select CAST(1 as VARCHAR2(20)) ID, 1 PROBA_Y, 1 PROBA_N, CAST(1 as VARCHAR2(2)) IND from dual'',
+                                                ''ChurnRFPred''))';                  
+
+                          /* Executing the statement for building table */
+                          execute immediate sql_stmt; 
+
                   EXCEPTION
                     when ex then
                         DBMS_OUTPUT.PUT_LINE('I am in exception');
