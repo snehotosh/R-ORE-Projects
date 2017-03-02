@@ -39,3 +39,12 @@ begin
             pred.df
     }');
 end;
+
+#################################### Execution SQL ###########################
+select *
+from   table(rqTableEval(
+         cursor(select * from churntopred),
+         cursor(select 'dsRFstore' "datastore_name", 1 "ore.connect" from dual),
+        'select CAST(1 as VARCHAR2(20)) ID, 1 PROBA_Y, 1 PROBA_N, CAST(1 as VARCHAR2(2)) IND from dual',
+         'ChurnRFPred'));
+##############################################################################
