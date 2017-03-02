@@ -5,13 +5,15 @@ Author: Snehotosh Banerjee
 Date: 20/01/2017
 *********************************************************/
   PROCEDURE AA_UC1_ATTRITION_TRAIN_RUN_PRC;
+  PROCEDURE AA_UC1_ATTRITION_PRED_RUN_PRC;
                                                
 /*********************************************************
 Usecase 2 - Employee Performance Training - TESTED OK
 Author: Snehotosh Banerjee
 Date: 20/01/2017
 **********************************************************/
-  PROCEDURE AA_UC2_PERF_TRAIN_RUN_PRC;                                             
+  PROCEDURE AA_UC2_PERF_TRAIN_RUN_PRC;  
+  PROCEDURE AA_UC2_PERF_PRED_RUN_PRC;
   
 /*********************************************************
 Usecase 3 - Employee Profiling - TESTED OK
@@ -19,6 +21,14 @@ Author: Snehotosh Banerjee
 Date: 20/01/2017
 *********************************************************/
   PROCEDURE AA_UC3_PROFILE_TRAIN_RUN_PRC;
+
+/*********************************************************
+Usecase 4 - Recruitment (No real DATA)
+Author: Snehotosh Banerjee
+Date: 20/01/2017
+*********************************************************/  
+  PROCEDURE AA_UC4_RECRUIT_TRAIN_RUN_PRC;
+  PROCEDURE AA_UC4_RECRUIT_PRED_RUN_PRC;
   
 /*********************************************************
 Usecase 5 - Forecasting Payroll Cost - TESTED OK
@@ -28,7 +38,6 @@ Date: 27/01/2017
   PROCEDURE AA_UC5_FORECAST_TRAIN_RUN_PRC;
   
 END AA_USECASE_ALGO_RUN_PKG;
-
 
 create or replace PACKAGE BODY AA_USECASE_ALGO_RUN_PKG AS
 
@@ -78,6 +87,21 @@ create or replace PACKAGE BODY AA_USECASE_ALGO_RUN_PKG AS
       END;   
       
       /******************************************************************************* 
+      Calling Procedure - UC4 - Recruitment
+      ********************************************************************************/
+      PROCEDURE AA_UC4_RECRUIT_TRAIN_RUN_PRC IS
+      BEGIN
+        AA_USECASE_ALGO_LIB_PKG.AA_UC4_TRAIN_PRC(
+        p_sql =>   'select GENDER, AGE, APPLICANT_RANK, EMP_REFERRAL, TOT_WORKEX, NO_OF_COMPANY, HR_STATUS
+                    FROM AA_UC4_RECRUITMENT_TBL',
+        p_is_bal_reqd => 'N',
+        p_perc_os => 300,
+        p_perc_us => 200,
+        p_trn_ratio => 0.8,
+        p_tgt_class_label => 'Y');
+      END;
+      
+      /******************************************************************************* 
       Calling the Procedure - UC5 - Payroll Cost 
       ********************************************************************************/
       PROCEDURE AA_UC5_FORECAST_TRAIN_RUN_PRC IS
@@ -91,5 +115,44 @@ create or replace PACKAGE BODY AA_USECASE_ALGO_RUN_PKG AS
                  p_end_win => 2015,
                  p_trend_win => 60);
       END;
-
+      
+      /******************************************************************************* 
+      ****************************ALL USECASE PREDICTION******************************
+                            CHANGE THE p_test_sql Table Name
+      ********************************************************************************/ 
+      PROCEDURE AA_UC1_ATTRITION_PRED_RUN_PRC IS
+      BEGIN
+      AA_USECASE_ALGO_LIB_PKG.AA_PREDICTION_PRC(
+       p_test_sql => 'select NATIONALITY, GENDER,AGE,MARITAL_STATUS,TENURE,CHNG_COMPA_L4Y,CHNG_COMPA_LY,AVG_PERF_L4Y,
+                    CHNG_SICKLV_L4Y,CHNG_SICKLV_LY,DEPT_CHNG_L4Y,PROMO_L4Y,SALREV_L4Y,SVR_CHNG_L4Y,ISCHURN
+                    FROM AA_COMMN_MDL_TRAIN_TBL',
+       p_train_tab_name => 'AA_COMMN_MDL_TRAIN_TBL',
+       p_ds_name => 'dsRF_churn_store',
+       p_out_table_name => 'AA_UC1_PRED_OUTPUT_TBL'
+       );
+      END;
+      
+      
+      PROCEDURE AA_UC2_PERF_PRED_RUN_PRC IS
+      BEGIN
+      AA_USECASE_ALGO_LIB_PKG.AA_PREDICTION_PRC(p_test_sql => 'select NATIONALITY, GENDER,AGE,MARITAL_STATUS,TENURE,CHNG_COMPA_L4Y,CHNG_COMPA_LY,AVG_PERF_L4Y,
+                    CHNG_SICKLV_L4Y,CHNG_SICKLV_LY,DEPT_CHNG_L4Y,PROMO_L4Y,SALREV_L4Y,SVR_CHNG_L4Y, 
+                    PERF_CATEG1 FROM AA_COMMN_MDL_TRAIN_TBL',
+       p_train_tab_name => 'AA_COMMN_MDL_TRAIN_TBL',
+       p_ds_name => 'dsRF_perf_store',
+       p_out_table_name => 'AA_UC2_PRED_OUTPUT_TBL'
+       );
+      END;
+      
+      
+      PROCEDURE AA_UC4_RECRUIT_PRED_RUN_PRC IS
+      BEGIN
+      AA_USECASE_ALGO_LIB_PKG.AA_PREDICTION_PRC(p_test_sql => 'select GENDER, AGE, APPLICANT_RANK, EMP_REFERRAL, TOT_WORKEX, NO_OF_COMPANY, HR_STATUS
+                    FROM AA_UC4_RECRUITMENT_TBL',
+       p_train_tab_name => 'AA_UC4_RECRUITMENT_TBL',
+       p_ds_name => 'dsRF_Recruitment_store',
+       p_out_table_name => 'AA_UC4_PRED_OUTPUT_TBL'
+       );
+      END;
+      
 END AA_USECASE_ALGO_RUN_PKG;
