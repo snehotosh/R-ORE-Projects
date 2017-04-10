@@ -1,0 +1,272 @@
+create or replace PACKAGE AA_USECASE_ALGO_RUN_PKG AS
+/********************************************************* 
+Usecase 1 - Employee Attrition Training - TESTED OK
+Author: Snehotosh Banerjee
+Date: 20/01/2017
+*********************************************************/
+  PROCEDURE AA_UC1_ATTRITION_TRAIN_RUN_PRC;
+  PROCEDURE AA_UC1_ATTRITION_PRED_RUN_PRC;
+                                               
+/*********************************************************
+Usecase 2 - Employee Performance Training - TESTED OK
+Author: Snehotosh Banerjee
+Date: 20/01/2017
+**********************************************************/
+  PROCEDURE AA_UC2_PERF_TRAIN_RUN_PRC;  
+  PROCEDURE AA_UC2_PERF_PRED_RUN_PRC;
+  
+/*********************************************************
+Usecase 3 - Employee Profiling - TESTED OK
+Author: Snehotosh Banerjee
+Date: 20/01/2017
+*********************************************************/
+  PROCEDURE AA_UC3_PROFILE_TRAIN_RUN_PRC;
+
+/*********************************************************
+Usecase 5 - Forecasting Payroll Cost - TESTED OK
+Author: Snehotosh Banerjee
+Date: 27/01/2017
+*********************************************************/
+  PROCEDURE AA_UC5_FORECAST_TRAIN_RUN_PRC;
+  PROCEDURE AA_UC5_FC_TRN_DEPT_RUN_PRC;
+  PROCEDURE AA_UC5_FC_TRN_BP_DEPT_RUN_PRC;
+  PROCEDURE AA_UC5_FC_TRN_VP_DEPT_RUN_PRC;
+  
+END AA_USECASE_ALGO_RUN_PKG;
+
+create or replace PACKAGE BODY AA_USECASE_ALGO_RUN_PKG AS
+
+      /******************************************************************************* 
+      Calling Procedure - UC1 - Attrition
+      ********************************************************************************/
+      PROCEDURE AA_UC1_ATTRITION_TRAIN_RUN_PRC IS
+      BEGIN
+        AA_USECASE_ALGO_LIB_PKG.AA_UC1_TRAIN_PRC(
+        p_sql =>   'select NATIONALITY, GENDER,AGE,MARITAL_STATUS,TENURE,CHNG_COMPA_L4Y,CHNG_COMPA_LY,AVG_PERF_L4Y,
+                    CHNG_SICKLV_L4Y,CHNG_SICKLV_LY,DEPT_CHNG_L4Y,PROMO_L4Y,SALREV_L4Y,SVR_CHNG_L4Y,ISCHURN
+                    FROM AA_COMMN_MDL_TRAIN_TBL WHERE AGE <=55',
+        p_is_bal_reqd => 'Y',
+        p_perc_os => 1000,
+        p_perc_us => 100,
+        p_trn_ratio => 0.8,
+        p_tgt_class_label => 'Y');
+      END;
+      
+      /******************************************************************************* 
+      Calling Procedure - UC2 - Performance 
+      'select NATIONALITY, GENDER,AGE,MARITAL_STATUS,TENURE,CHNG_COMPA_L4Y,CHNG_COMPA_LY,AVG_PERF_L4Y,
+                    CHNG_SICKLV_L4Y,CHNG_SICKLV_LY,DEPT_CHNG_L4Y,PROMO_L4Y,SALREV_L4Y,SVR_CHNG_L4Y, 
+                    PERF_CATEG1 FROM AA_COMMN_MDL_TRAIN_TBL'
+      ********************************************************************************/
+      PROCEDURE AA_UC2_PERF_TRAIN_RUN_PRC IS
+      BEGIN
+        AA_USECASE_ALGO_LIB_PKG.AA_UC2_TRAIN_PRC(
+        p_sql =>   'select NATIONALITY, GENDER,AGE,TENURE,AVG_PERF_L4Y,CHNG_SICKLV_L4Y,CHNG_SICKLV_LY,DEPT_CHNG_L4Y,
+                    PROMO_L4Y,SALREV_L4Y,SVR_CHNG_L4Y,AVG_UNPLV_L4Y,AVG_UNAUTH_L4Y,PERF_CATEG1 FROM AA_COMMN_MDL_TRAIN_TBL',
+        p_is_bal_reqd => 'N',
+        p_perc_os => 300,
+        p_perc_us => 200,
+        p_trn_ratio => 0.8); 
+      END;
+      
+      /******************************************************************************* 
+      Calling the Procedure - UC3 - Profiling 
+      'SELECT EMPID,NATIONALITY, GENDER,AGE,MARITAL_STATUS,TENURE,CHNG_COMPA_L4Y,
+                                  CHNG_COMPA_LY,AVG_PERF_L4Y,CHNG_SICKLV_L4Y,CHNG_SICKLV_LY,DEPT_CHNG_L4Y,
+                                  PROMO_L4Y,SALREV_L4Y,SVR_CHNG_L4Y
+                                  FROM AA_COMMN_MDL_TRAIN_TBL'
+      ********************************************************************************/
+      PROCEDURE AA_UC3_PROFILE_TRAIN_RUN_PRC IS
+      BEGIN
+        AA_USECASE_ALGO_LIB_PKG.AA_UC3_PRC(
+        p_sql => 'SELECT EMPID,AGE,MARITAL_STATUS,TENURE,CHNG_COMPA_L4Y,AVG_PERF_L4Y,CHNG_SICKLV_L4Y,DEPT_CHNG_L4Y,
+                  PROMO_L4Y,SALREV_L4Y,SVR_CHNG_L4Y
+                  FROM AA_COMMN_MDL_TRAIN_TBL',
+        p_isDendoReqd => 'N');
+      END;       
+      
+      /******************************************************************************* 
+      Calling the Procedure - UC5 - Payroll Cost 
+      ********************************************************************************/
+      PROCEDURE AA_UC5_FORECAST_TRAIN_RUN_PRC IS
+      BEGIN
+      AA_USECASE_ALGO_LIB_PKG.AA_UC5_PRC(p_sql => 'select YRMON,PAYROLL_COST from AA_PAYROLL_COST_TRAIN',
+                 p_is_seasonal => 'T' ,
+                 p_ts_measure_col => 'PAYROLL_COST',
+                 p_ts_time_col => 'YRMON',
+                 p_forecast_period => 12 ,
+                 p_start_win => 2011,
+                 p_end_win => 2016,
+                 p_trend_win => 72);
+      END;
+
+      /******************************************************************************* 
+      Calling the Procedure - UC5 - Payroll Cost 
+      ********************************************************************************/
+      PROCEDURE AA_UC5_FC_TRN_DEPT_RUN_PRC IS
+        sqlText VARCHAR2(4000):= '';              
+        sql_trunc_stmt varchar2(4000);  
+        sql_trunc_img_stmt varchar2(4000);
+        v_count NUMBER:=0; 
+        v_count_img NUMBER:=0;
+        v_tab_name VARCHAR2(30):='AA_UC5_FORECAST_DEPT_TBL';    
+        v_tab_img_name VARCHAR2(30):='AA_UC5_FORECAST_DEPT_IMG_TBL';
+        ex EXCEPTION;
+      BEGIN
+          /* Target table drop code */
+          sql_trunc_stmt:= 'TRUNCATE TABLE '||v_tab_name;     
+          sql_trunc_img_stmt:= 'TRUNCATE TABLE '||v_tab_img_name;     
+
+          /* Checking whether table exists */
+          select count(*) INTO v_count from AA_UC5_FORECAST_DEPT_TBL;   
+          select count(*) INTO v_count_img from AA_UC5_FORECAST_DEPT_IMG_TBL;
+
+          /* Checking whether table exists */
+          IF v_count > 0 THEN
+                execute immediate sql_trunc_stmt;
+          END IF;  
+
+          IF v_count_img > 0 THEN
+                execute immediate sql_trunc_img_stmt;
+          END IF; 
+          
+          /* Running Model PER Department */
+          FOR rec in (select distinct deptno,dname from AA_PAYROLL_COST_DEPT_TRAIN)
+          LOOP
+              sqlText:='select YRMON,PAYROLL_COST from AA_PAYROLL_COST_DEPT_TRAIN where DEPTNO = '''||rec.DEPTNO||''' ORDER BY YR,MON_NUM';
+              
+              AA_USECASE_ALGO_LIB_PKG.AA_UC5_DEPT_PRC(p_sql => sqlText,
+                     p_is_seasonal => 'T' ,
+                     p_ts_measure_col => 'PAYROLL_COST',
+                     p_ts_time_col => 'YRMON',
+                     p_forecast_period => 12 ,
+                     p_start_win => 2011,
+                     p_end_win => 2016,
+                     p_trend_win => 72,
+                     p_deptno => rec.DEPTNO,
+                     p_dname => rec.DNAME
+                     );          
+          END LOOP;
+      END;      
+      
+      PROCEDURE AA_UC5_FC_TRN_BP_DEPT_RUN_PRC IS
+        sqlText VARCHAR2(4000):= '';              
+        sql_trunc_stmt varchar2(4000);  
+        sql_trunc_img_stmt varchar2(4000);
+        v_count NUMBER:=0; 
+        v_count_img NUMBER:=0;
+        v_tab_name VARCHAR2(30):='AA_UC5_FC_BPAY_DEPT_TBL';    
+        v_tab_img_name VARCHAR2(30):='AA_UC5_FC_BPAY_DEPT_IMG_TBL';
+        ex EXCEPTION;
+      BEGIN
+          /* Target table drop code */
+          sql_trunc_stmt:= 'TRUNCATE TABLE '||v_tab_name;     
+          sql_trunc_img_stmt:= 'TRUNCATE TABLE '||v_tab_img_name;     
+
+          /* Checking whether table exists */
+          select count(*) INTO v_count from AA_UC5_FC_BPAY_DEPT_TBL;   
+          select count(*) INTO v_count_img from AA_UC5_FC_BPAY_DEPT_IMG_TBL;
+
+          /* Checking whether table exists */
+          IF v_count > 0 THEN
+                execute immediate sql_trunc_stmt;
+          END IF;  
+
+          IF v_count_img > 0 THEN
+                execute immediate sql_trunc_img_stmt;
+          END IF; 
+          
+          /* Running Model PER Department */
+          FOR rec in (select distinct deptno,dname from AA_PAYROLL_COST_DEPT_TRAIN)
+          LOOP
+              sqlText:='select YRMON,BASE_PAY as PAYROLL_COST from AA_PAYROLL_COST_DEPT_TRAIN where DEPTNO = '''||rec.DEPTNO||''' ORDER BY YR,MON_NUM';
+              
+              AA_USECASE_ALGO_LIB_PKG.AA_UC5_DEPT_PRC(p_sql => sqlText,
+                     p_is_seasonal => 'T' ,
+                     p_ts_measure_col => 'PAYROLL_COST',
+                     p_ts_time_col => 'YRMON',
+                     p_forecast_period => 12 ,
+                     p_start_win => 2011,
+                     p_end_win => 2016,
+                     p_trend_win => 72,
+                     p_deptno => rec.DEPTNO,
+                     p_dname => rec.DNAME
+                     );          
+          END LOOP;
+      END; 
+      
+      
+      PROCEDURE AA_UC5_FC_TRN_VP_DEPT_RUN_PRC IS
+        sqlText VARCHAR2(4000):= '';              
+        sql_trunc_stmt varchar2(4000);  
+        sql_trunc_img_stmt varchar2(4000);
+        v_count NUMBER:=0; 
+        v_count_img NUMBER:=0;
+        v_tab_name VARCHAR2(30):='AA_UC5_FC_VARPAY_DEPT_TBL';    
+        v_tab_img_name VARCHAR2(30):='AA_UC5_FC_VARPAY_DEPT_IMG_TBL';
+        ex EXCEPTION;
+      BEGIN
+          /* Target table drop code */
+          sql_trunc_stmt:= 'TRUNCATE TABLE '||v_tab_name;     
+          sql_trunc_img_stmt:= 'TRUNCATE TABLE '||v_tab_img_name;     
+
+          /* Checking whether table exists */
+          select count(*) INTO v_count from AA_UC5_FC_VARPAY_DEPT_TBL;   
+          select count(*) INTO v_count_img from AA_UC5_FC_VARPAY_DEPT_IMG_TBL;
+
+          /* Checking whether table exists */
+          IF v_count > 0 THEN
+                execute immediate sql_trunc_stmt;
+          END IF;  
+
+          IF v_count_img > 0 THEN
+                execute immediate sql_trunc_img_stmt;
+          END IF; 
+          
+          /* Running Model PER Department */
+          FOR rec in (select distinct deptno,dname from AA_PAYROLL_COST_DEPT_TRAIN)
+          LOOP
+              sqlText:='select YRMON,VARIABLE_PAY from AA_PAYROLL_COST_DEPT_TRAIN where DEPTNO = '''||rec.DEPTNO||''' ORDER BY YR,MON_NUM';
+              
+              AA_USECASE_ALGO_LIB_PKG.AA_UC5_DEPT_PRC(p_sql => sqlText,
+                     p_is_seasonal => 'T' ,
+                     p_ts_measure_col => 'VARIABLE_PAY',
+                     p_ts_time_col => 'YRMON',
+                     p_forecast_period => 12 ,
+                     p_start_win => 2011,
+                     p_end_win => 2016,
+                     p_trend_win => 72,
+                     p_deptno => rec.DEPTNO,
+                     p_dname => rec.DNAME
+                     );          
+          END LOOP;
+      END; 
+            
+      /******************************************************************************* 
+      ****************************ALL USECASE PREDICTION******************************
+                            CHANGE THE p_test_sql Table Name
+      ********************************************************************************/ 
+      PROCEDURE AA_UC1_ATTRITION_PRED_RUN_PRC IS
+      BEGIN
+      AA_USECASE_ALGO_LIB_PKG.AA_PREDICTION_UC1_PRC(
+       p_test_sql => 'select EMPID,NATIONALITY, GENDER,AGE,MARITAL_STATUS,TENURE,CHNG_COMPA_L4Y,CHNG_COMPA_LY,AVG_PERF_L4Y,
+                    CHNG_SICKLV_L4Y,CHNG_SICKLV_LY,DEPT_CHNG_L4Y,PROMO_L4Y,SALREV_L4Y,SVR_CHNG_L4Y,ISCHURN
+                    FROM AA_COMMN_MDL_TRAIN_TBL',
+       p_train_tab_name => 'AA_COMMN_MDL_TRAIN_TBL',
+       p_ds_name => 'dsRF_churn_store',
+       p_out_table_name => 'AA_UC1_PRED_OUTPUT_TBL'
+       );
+      END;
+      
+      
+      PROCEDURE AA_UC2_PERF_PRED_RUN_PRC IS
+      BEGIN
+      AA_USECASE_ALGO_LIB_PKG.AA_PREDICTION_UC2_PRC(p_test_sql => 'select EMPID,NATIONALITY, GENDER,AGE,TENURE,AVG_PERF_L4Y,CHNG_SICKLV_L4Y,CHNG_SICKLV_LY,DEPT_CHNG_L4Y,
+                    PROMO_L4Y,SALREV_L4Y,SVR_CHNG_L4Y,AVG_UNPLV_L4Y,AVG_UNAUTH_L4Y,PERF_CATEG1 FROM AA_COMMN_MDL_TRAIN_TBL',
+       p_train_tab_name => 'AA_COMMN_MDL_TRAIN_TBL',
+       p_ds_name => 'dsRF_perf_store',
+       p_out_table_name => 'AA_UC2_PRED_OUTPUT_TBL'
+       );
+      END;
+      
+END AA_USECASE_ALGO_RUN_PKG;
