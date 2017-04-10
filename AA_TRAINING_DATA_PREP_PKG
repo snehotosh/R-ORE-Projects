@@ -1,0 +1,1363 @@
+create or replace PACKAGE AA_TRAINING_DATA_PREP_PKG AS
+   /*  Employee Master */
+  PROCEDURE AA_EMP_MASTER_TMP_PRC(p_max_obs_year NUMBER,p_max_perf_year NUMBER,out_status OUT NUMBER);
+  PROCEDURE AA_EMP_MASTER_CHURN_TMP_PRC(p_max_perf_year NUMBER,p_min_perf_year NUMBER,out_status OUT NUMBER);
+  PROCEDURE AA_EMP_MASTER_CHURN_UPD_PRC(out_status OUT NUMBER);
+   /*  Employee Compa ratio */
+  PROCEDURE AA_EMP_COMPA_TBL_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Department Change */  
+  PROCEDURE AA_EMP_DEPT_CHNG_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Performance Change */
+  PROCEDURE AA_EMP_PERFORMANCE_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Promotion Change */
+  PROCEDURE AA_EMP_PROMO_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Salary Revision */
+  PROCEDURE AA_EMP_SALREV_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Sick Leaves */
+  PROCEDURE AA_EMP_SICK_LEAVES_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Unpaid Leaves */
+  PROCEDURE AA_EMP_UNPAID_LEAVES_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Unauthorized Leaves */
+  PROCEDURE AA_EMP_UNAUTH_LEAVES_PRC(p_start_year NUMBER,out_status OUT NUMBER);
+   /*  Employee Supervisor Change */
+  PROCEDURE AA_EMP_SUPERVISOR_PRC(p_start_year NUMBER,out_status OUT NUMBER);  
+   /*  Payroll Cost */
+  PROCEDURE AA_PAYROLL_COST_PRC(out_status OUT NUMBER); 
+   /*  Payroll Cost - Department wise */
+  PROCEDURE  AA_PAYROLL_DEPT_COST_PRC(p_start_year NUMBER,p_end_year NUMBER,out_status OUT NUMBER);
+  /* Main Train Table */
+  PROCEDURE AA_COMMN_MDL_TRAIN_PRC(p_perf_start_dt VARCHAR2,p_perf_end_dt VARCHAR2,out_status OUT NUMBER);
+  END AA_TRAINING_DATA_PREP_PKG;
+  
+  create or replace PACKAGE BODY AA_TRAINING_DATA_PREP_PKG AS
+  /*******************************************************************************
+  #1.Procedure for creating Employee Master Table
+  ********************************************************************************/
+  PROCEDURE AA_EMP_MASTER_TMP_PRC(p_max_obs_year NUMBER,p_max_perf_year NUMBER,out_status OUT NUMBER) IS
+        v_count NUMBER:= 0;  
+    BEGIN   
+      /* Checking Whether table is empty or not */
+      select count(*) into v_count from AA_EMP_MASTER_TRN_TMP_STG;
+      
+      IF v_count > 0 then
+        EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_EMP_MASTER_TRN_TMP_STG';
+      END IF;
+      
+      /* Inserting Data into AA_EMP_MASTER_TMP_TEST_TBL */
+      INSERT INTO AA_EMP_MASTER_TRN_TMP_STG                      
+      select distinct T2519170.ASSIGNMENT_NUMBER as EMPID,
+                         T2519170.X_GROUP_NAME as NATIONALITY,
+                         T2518758.GLOBAL_FULL_NAME as ENAME,
+                         T2518758.W_SEX_MF_CODE as GENDER,
+                         ROUND((TO_DATE(TO_CHAR(p_max_obs_year)||'-12-31','YYYY-MM-DD') - T2560293.DATE_OF_BIRTH)/365) as AGE,     
+                         T2518758.W_MARITAL_STATUS_CODE as MARITAL_STATUS,
+                         T2518758.HIEST_EDU_DEG_CODE as EDUCATION,
+                         T2518758.DISABLED_FLG as DISABLED_FLG,
+                         T2622830.ORG_NUM as DEPTNO,
+                         T2528578.ORG_NAME as DEPT_NAME,              
+                         T2549985.EMP_HIRE_DT as ORIG_HIRE_DT,
+                         T2549985.last_worked_dt as LAST_WORKED_DT,
+                         T2535510.event_dt_wid as EVENT_DT,
+                         ROUND((TO_DATE(TO_CHAR(p_max_obs_year)||'-12-31','YYYY-MM-DD') - T2549985.ORIG_HIRE_DT)/365) as TENURE,
+                         T2519385.JOB_NAME as JOB_NAME,
+                         decode(T2549985.last_worked_dt,'','Y','N') IS_ACTIVE,
+                         'N' as ISCHURN
+                    from 
+                         (SELECT
+                          DATASOURCE_NUM_ID,
+                          INTEGRATION_ID,
+                          ORG_DESCR,
+                          ORG_NAME,
+                          LANGUAGE_CODE
+                          FROM 
+                          W_INT_ORG_D_TL
+                          WHERE
+                          LANGUAGE_CODE = 'US') T2528578,
+                         W_INT_ORG_D T2622830 /* Dim_W_INT_ORG_D_Department */ ,
+                         W_HR_ASSIGNMENT_D T2519170 /* Dim_W_HR_ASSIGNMENT_D */ ,
+                         W_YEAR_D T525577 /* Dim_W_YEAR_D */ ,
+                         W_HR_PERSON_LEG_D T2518758 /* Dim_W_HR_PERSON_LEG_D */ ,
+                         W_WRKFC_EVT_MONTH_F T2535510 /* Fact_W_WRKFC_EVT_MONTH_F_Snapshot */ ,
+                         W_EMPLOYEE_D T2549985 /* Dim_W_EMPLOYEE_D */ ,
+                         W_JOB_D T2643198 /* Dim_W_JOB_D */ ,
+                         W_HR_PERSON_D T2560293 /* Dim_W_HR_PERSON_D_PersonLegislation */ ,
+                         (SELECT 
+                           JOB_NAME,
+                           JOB_DESCR,
+                           DATASOURCE_NUM_ID,
+                           INTEGRATION_ID 
+                    FROM W_JOB_D_TL
+                    WHERE LANGUAGE_CODE = 'US') T2519385
+                    where  
+                      ( T2528578.DATASOURCE_NUM_ID = T2622830.DATASOURCE_NUM_ID and 
+                        T2519170.ROW_WID = T2535510.HR_ASSIGNMENT_WID and 
+                        T2528578.INTEGRATION_ID = T2622830.INTEGRATION_ID and 
+                        T2535510.HR_ORG_WID = T2622830.SCD1_WID and 
+                        T2535510.EFFECTIVE_TO_DT < T2622830.EFFECTIVE_TO_DT and 
+                        T525577.ROW_WID = T2535510.EVENT_YEAR_WID and 
+                        T2535510.EVENT_MONTH_WID = case  when floor(T525577.CAL_YEAR_END_DT_WID / 100) > floor((select to_number(to_char(d.day_dt,'YYYYMMDD')) from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) / 100) then floor((select to_number(to_char(d.day_dt,'YYYYMMDD')) from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) / 100) else floor(T525577.CAL_YEAR_END_DT_WID / 100) end  and 
+                        T2535510.EFFECTIVE_TO_DT < T2518758.EFFECTIVE_TO_DT and 
+                        T2518758.DATASOURCE_NUM_ID = T2560293.DATASOURCE_NUM_ID and 
+                        T2518758.PERSON_INTEGRATION_ID = T2560293.INTEGRATION_ID and 
+                        T2518758.SCD1_WID = T2535510.HR_PERSON_LEG_WID and 
+                        T2535510.EFFECTIVE_TO_DT >= T2518758.EFFECTIVE_FROM_DT and 
+                        T2519385.DATASOURCE_NUM_ID = T2643198.DATASOURCE_NUM_ID and 
+                        T2519385.INTEGRATION_ID = T2643198.JOB_ID and 
+                        T2535510.EFFECTIVE_TO_DT < T2549985.EFFECTIVE_TO_DT and 
+                        T2535510.EMPLOYEE_WID = T2549985.SCD1_WID and 
+                        T2535510.EFFECTIVE_TO_DT >= T2549985.EFFECTIVE_FROM_DT and 
+                        T2535510.EFFECTIVE_TO_DT < T2643198.EFFECTIVE_TO_DT and 
+                        T2535510.JOB_WID = T2643198.SCD1_WID and 
+                        T2535510.EFFECTIVE_TO_DT >= T2622830.EFFECTIVE_FROM_DT and 
+                        T2519170.W_ASSIGNMENT_TYPE_CODE = 'E' and 
+                        T2535510.SNAPSHOT_IND = 1 and 
+                        T2622830.CURRENT_FLG = 'Y' and 
+                        T2535510.DELETE_FLG <> 'Y' and 
+                        T525577.CAL_YEAR_START_DT >= TO_DATE('2011-01-01 00:00:00' , 'YYYY-MM-DD HH24:MI:SS') and  /* Coming automatic */
+                        T2535510.EFFECTIVE_TO_DT >= T2643198.EFFECTIVE_FROM_DT and 
+                        T525577.CAL_YEAR <= p_max_perf_year  and /* Later will be parameterized */
+                        --ROUND((sysdate - T2560293.DATE_OF_BIRTH)/365) <=55 and /* Age <=55 */
+                        --ROUND((to_date(p_min_perf_date) - T2549985.EMP_HIRE_DT)/365) >= p_min_tenure and /* Min Tenure > 4 years from last observation year */
+                        (T2622830.HR_ORG_FLG in ('U', 'Y')) and 
+                        (T2535510.SNAPSHOT_MONTH_END_IND in (1) or (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) < T2535510.EFFECTIVE_TO_DT) and 
+                        (T2535510.LAST_MONTH_IN_YEAR_IND in (1) or (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) < T2535510.EFFECTIVE_TO_DT) and 
+                        T2535510.EFFECTIVE_FROM_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) 
+                      );
+          
+          IF SQL%ROWCOUNT > 0 THEN
+            dbms_output.put_line('Records Inserted into AA_EMP_MASTER_TRN_TMP_STG are:'||sql%ROWCOUNT);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          
+          out_status:=1; /* Shows Success */
+      EXCEPTION
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+  
+  /*******************************************************************************
+      #2.Procedure for creating Employee Master Table
+  ********************************************************************************/
+      PROCEDURE  AA_EMP_MASTER_CHURN_TMP_PRC(p_max_perf_year NUMBER,p_min_perf_year NUMBER,out_status OUT NUMBER) IS
+        v_count number:=0;    
+      BEGIN
+                /* Checking Whether table is empty or not */
+            select count(*) into v_count from AA_EMP_MASTER_TRN_CHRN_TMP_STG;
+            
+            IF v_count > 0 then
+              EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_EMP_MASTER_TRN_CHRN_TMP_STG';
+            END IF;
+      
+      /* Inserting Data into AA_EMP_MASTER_TMP_TEST_TBL */
+                    INSERT INTO AA_EMP_MASTER_TRN_CHRN_TMP_STG
+                    select distinct T2519170.ASSIGNMENT_NUMBER as EMPID,'Y' as ISCHURN
+                    from 
+                         W_HR_ASSIGNMENT_D T2519170 /* Dim_W_HR_ASSIGNMENT_D */ ,
+                         W_MONTH_D T531732 /* Dim_W_MONTH_D */ ,
+                         W_WRKFC_EVT_MONTH_F T2535396 /* Fact_W_WRKFC_EVT_MONTH_F_Event */ ,
+                         W_WRKFC_EVENT_TYPE_D T2535403 /* Dim_W_WRKFC_EVENT_TYPE_D */ 
+                    where  
+                    ( 
+                      T531732.ROW_WID = T2535396.EVENT_MONTH_WID and 
+                      T2519170.ROW_WID = T2535396.HR_ASSIGNMENT_WID and 
+                      T2519170.W_ASSIGNMENT_TYPE_CODE = 'E' and 
+                      T2535396.EVENT_TYPE_RSN_WID = T2535403.ROW_WID and 
+                      T2535403.W_EVENT_CODE = 'TERM_VOLUNTARY' and 
+                      0 < T2535403.ROW_WID and 
+                      T2535396.DELETE_FLG <> 'Y' and 
+                      T531732.CAL_MONTH_START_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) and 
+                      (T531732.CAL_YEAR in (p_min_perf_year,p_max_perf_year)) and /* Has to be parameterized */
+                      T2535396.EFFECTIVE_FROM_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) 
+                    );
+                      
+          IF SQL%ROWCOUNT > 0 THEN
+            dbms_output.put_line('Records Inserted into AA_EMP_MASTER_TRN_CHRN_TMP_STG are:'||sql%ROWCOUNT);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+  
+      /*******************************************************************************
+      #3.Procedure for creating Employee Master Table
+      ********************************************************************************/
+      
+      PROCEDURE  AA_EMP_MASTER_CHURN_UPD_PRC(out_status OUT NUMBER) IS
+        v_count number:=0;    
+      BEGIN
+          /* Checking Whether table is empty or not */
+            select count(*) into v_count from AA_EMP_MASTER_TRN_STG;
+            
+            IF v_count > 0 then
+              EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_EMP_MASTER_TRN_STG';
+            END IF;
+      /* 
+        Update the Employee Table with the churned table.
+        Here we are replacing ISCHURN value of employee master with the value of churn temporary table.
+      */
+        UPDATE AA_EMP_MASTER_TRN_TMP_STG tgt
+                    set tgt.ISCHURN = (select src.ISCHURN from AA_EMP_MASTER_TRN_CHRN_TMP_STG src 
+                            where 
+                           tgt.EMPID = src.EMPID
+                        )
+                    where
+                    tgt.empid in (select empid from AA_EMP_MASTER_TRN_CHRN_TMP_STG);
+          
+          /*
+            Checking whether update statement has updated any records.
+          */
+          IF SQL%ROWCOUNT >0 THEN  
+              /* This query is to remove duplicate becuase of many SCD records.
+                 The logic is to take the current version through max Event Date.
+              */
+              INSERT INTO AA_EMP_MASTER_TRN_STG
+              select distinct a.* from AA_EMP_MASTER_TRN_TMP_STG a where 
+              a.event_dt in (select max(b.event_dt) from AA_EMP_MASTER_TRN_TMP_STG b where a.empid = b.empid);
+              
+              dbms_output.put_line('Records Inserted into AA_EMP_MASTER_TRN_STG are:'||sql%ROWCOUNT);
+              COMMIT;
+          ELSE
+            ROLLBACK;
+          END IF;        
+          
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+  
+      /*******************************************************************************
+      #4.Procedure for creating Compa-Ratio Table - PIVOT
+      ********************************************************************************/
+      PROCEDURE  AA_EMP_COMPA_TBL_PRC(p_start_year NUMBER,out_status OUT NUMBER) IS
+        sql_stmt CLOB:='';
+        P_YR1 number:=0;
+        P_YR2 number:=0;
+        P_YR3 number:=0;
+        P_YR4 number:=0;  
+        v_count number:=0;
+        v_count_post_run number:=0;
+        --v_tbl_name VARCHAR2(50):= 'AA_EMP_COMPA_TBL';
+      BEGIN
+        P_YR1:= p_start_year;
+        P_YR2:= p_start_year + 1;
+        P_YR3:= p_start_year + 2;
+        P_YR4:= p_start_year + 3;  
+        
+        /* Checking Whether table is empty or not */
+         select count(*) into v_count from AA_EMP_COMPA_TRN_STG;
+            
+          IF v_count > 0 then
+              EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_EMP_COMPA_TRN_STG';
+          END IF;         
+        
+         sql_stmt:= 'INSERT INTO AA_EMP_COMPA_TRN_STG
+                     WITH 
+                     SAWITH0 AS
+                      (
+                           select distinct T2519170.ASSIGNMENT_NUMBER as EMPID,
+                           T2573215.W_COMPA_RATIO_BAND_CODE as COMPA_BAND,
+                           avg(nvl(T2535510.COMPARATIO,0)) as COMPA_RATIO,
+                           T525577.CAL_YEAR as YR
+                            from 
+                                 W_HR_ASSIGNMENT_D T2519170 /* Dim_W_HR_ASSIGNMENT_D */ ,
+                                 W_COMPA_RATIO_BAND_D T2573215 /* Dim_W_COMPA_RATIO_BAND_D_Value */ ,
+                                 W_YEAR_D T525577 /* Dim_W_YEAR_D */ ,
+                                 W_WRKFC_EVT_MONTH_F T2535510 /* Fact_W_WRKFC_EVT_MONTH_F_Snapshot */ 
+                            where  
+                            ( 
+                                T2519170.ROW_WID = T2535510.HR_ASSIGNMENT_WID and 
+                                T525577.ROW_WID = T2535510.EVENT_YEAR_WID and 
+                                T2535510.COMPARATIO_BAND_WID = T2573215.ROW_WID and 
+                                T2519170.W_ASSIGNMENT_TYPE_CODE = ''E'' and 
+                                T2573215.LEVEL_ID = ''COMP'' and 
+                                T525577.CAL_YEAR IN ('|| P_YR1 ||','|| P_YR2 ||','|| P_YR3 ||','|| P_YR4 || ') and
+                                T2535510.DELETE_FLG <> ''Y'' and 
+                                T2535510.SNAPSHOT_IND = 1 and 
+                                (T2535510.EVENT_MONTH_WID = case  when floor(T525577.CAL_YEAR_END_DT_WID / 100) > floor((select to_number(to_char(d.day_dt,''YYYYMMDD'')) from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE=''Current'' and d.CAL_MONTH_WID = m.ROW_WID) / 100) then floor((select to_number(to_char(d.day_dt,''YYYYMMDD'')) from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE=''Current'' and d.CAL_MONTH_WID = m.ROW_WID) / 100) 
+                                else floor(T525577.CAL_YEAR_END_DT_WID / 100) end)  and 
+                                (T2535510.SNAPSHOT_MONTH_END_IND in (1) or ((select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE=''Current'' and d.CAL_MONTH_WID = m.ROW_WID) < T2535510.EFFECTIVE_TO_DT)) and 
+                                (T2535510.LAST_MONTH_IN_YEAR_IND in (1) or ((select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE=''Current'' and d.CAL_MONTH_WID = m.ROW_WID) < T2535510.EFFECTIVE_TO_DT)) and 
+                                T2535510.EFFECTIVE_FROM_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE=''Current'' and d.CAL_MONTH_WID = m.ROW_WID)
+                            ) 
+                            group by T525577.CAL_YEAR, T2519170.ROW_WID, T2519170.ASSIGNMENT_NUMBER, T2573215.W_COMPA_RATIO_BAND_CODE
+                      )
+                      select 
+                      EMPID,
+                      sum(coalesce(COMPA_Y1,0)) as COMPA_Y1,
+                      sum(coalesce(COMPA_Y2,0)) as COMPA_Y2,
+                      sum(coalesce(COMPA_Y3,0)) as COMPA_Y3,
+                      sum(coalesce(COMPA_Y4,0)) as COMPA_Y4
+                      from
+                      (
+                        select EMPID,COMPA_BAND,COMPA_RATIO,YR from SAWITH0
+                      )
+                      PIVOT 
+                      (
+                        AVG(COMPA_RATIO) 
+                        FOR (YR) IN ('|| P_YR1 ||' as "COMPA_Y1",'|| P_YR2 ||' as "COMPA_Y2",'|| P_YR3  || ' as "COMPA_Y3",' || P_YR4  || ' as "COMPA_Y4")
+                      )
+                      group by EMPID';
+    
+              EXECUTE IMMEDIATE sql_stmt;
+              select count(*) into v_count_post_run from AA_EMP_COMPA_TRN_STG;
+              
+          IF v_count_post_run > 0 THEN
+            dbms_output.put_line('Records Inserted into AA_EMP_COMPA_TRN_STG are:'||v_count_post_run);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+  
+      /*******************************************************************************
+      #5.Procedure for creating Department Change Table
+      ********************************************************************************/
+      PROCEDURE  AA_EMP_DEPT_CHNG_PRC(p_start_year NUMBER,out_status OUT NUMBER) IS
+        P_YR1 number:=0;
+        P_YR2 number:=0;
+        P_YR3 number:=0;
+        P_YR4 number:=0;  
+        v_count number:=0;
+      BEGIN
+        P_YR1:= p_start_year;
+        P_YR2:= p_start_year + 1;
+        P_YR3:= p_start_year + 2;
+        P_YR4:= p_start_year + 3;
+        
+            /* Checking Whether table is empty or not */
+            select count(*) into v_count from AA_EMP_DEPT_CHNG_TRN_STG;
+            
+            IF v_count > 0 then
+              EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_EMP_DEPT_CHNG_TRN_STG';
+            END IF;
+            
+                    INSERT INTO AA_EMP_DEPT_CHNG_TRN_STG
+                    select 
+                         T2549985.EMPLOYEE_NUM as EMPID,
+                         T2535403.EVENT_REASON_CODE as REASON,
+                         sum(T2535396.EMP_IND) as NO_OF_DEPT_CNG_L4Y
+                    from 
+                         W_HR_ASSIGNMENT_D T2519170 /* Dim_W_HR_ASSIGNMENT_D */ ,
+                         W_EMPLOYEE_D T2549985 /* Dim_W_EMPLOYEE_D */ ,
+                         W_MONTH_D T531732 /* Dim_W_MONTH_D */ ,
+                         W_WRKFC_EVT_MONTH_F T2535396 /* Fact_W_WRKFC_EVT_MONTH_F_Event */ ,
+                         W_WRKFC_EVENT_TYPE_D T2535403 /* Dim_W_WRKFC_EVENT_TYPE_D */ 
+                    where  
+                    ( 
+                      T531732.ROW_WID = T2535396.EVENT_MONTH_WID and 
+                      T2519170.ROW_WID = T2535396.HR_ASSIGNMENT_WID and 
+                      T2535396.EMPLOYEE_WID = T2549985.SCD1_WID and 
+                      T2535396.EVENT_TYPE_RSN_WID = T2535403.ROW_WID and 
+                      T2519170.W_ASSIGNMENT_TYPE_CODE = 'E' and 
+                      T2535403.EVENT_CODE = 'ASG' and 
+                      T2535396.EFFECTIVE_FROM_DT < T2549985.EFFECTIVE_TO_DT and 
+                      T2535396.DELETE_FLG <> 'Y' and 
+                      0 < T2535403.ROW_WID and 
+                      T531732.CAL_MONTH_START_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) and 
+                      (T2535403.EVENT_REASON_CODE in ('EMP_ASSIGN_REASON:TRN', 'EMP_ASSIGN_REASON:TRN-NOP', 'EMP_ASSIGN_REASON:TRN-OP')) and 
+                      (T531732.CAL_YEAR in (P_YR1,P_YR2,P_YR3,P_YR4)) and /* Parameter has to be introduced */
+                      T2535396.EFFECTIVE_FROM_DT between T2549985.EFFECTIVE_FROM_DT and (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) 
+                    ) 
+                    group by T2535403.DATASOURCE_NUM_ID, T2535403.EVENT_REASON_CODE, T2549985.EMPLOYEE_NUM;
+                      
+          IF SQL%ROWCOUNT > 0 THEN
+            dbms_output.put_line('Records Inserted into AA_EMP_DEPT_CHNG_TRN_STG are:'||sql%ROWCOUNT);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+  
+      /*******************************************************************************
+      #6.Procedure for creating Performance Table -  PIVOT
+      ********************************************************************************/
+      PROCEDURE  AA_EMP_PERFORMANCE_PRC(p_start_year NUMBER,out_status OUT NUMBER) IS
+        sql_stmt CLOB:='';
+        P_YR1 number:=0;
+        P_YR2 number:=0;
+        P_YR3 number:=0;
+        P_YR4 number:=0;  
+        P_YR5 number:=0;
+        P_YR6 number:=0;
+        v_count number:=0;
+        v_count_post_run number:=0;
+        v_tbl_name VARCHAR2(50):= '';  
+        --ex EXCEPTION;
+        
+      BEGIN
+        P_YR1:= p_start_year;
+        P_YR2:= p_start_year + 1;
+        P_YR3:= p_start_year + 2;
+        P_YR4:= p_start_year + 3;
+        P_YR5:= p_start_year + 4;
+        P_YR6:= p_start_year + 5;      
+        
+        /* Checking Whether table is empty or not */
+            select count(*) into v_count from AA_EMP_PERF_TRN_STG;
+            
+            IF v_count > 0 then
+              EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_EMP_PERF_TRN_STG';
+            END IF;      
+            
+        sql_stmt:= 'INSERT INTO AA_EMP_PERF_TRN_STG
+                    WITH 
+                    SAWITH0 AS
+                    (
+                        select nvl(max(T2535510.NRMLSD_PERF_RATING),0) as PERF_RATING,
+                             T2519170.ASSIGNMENT_NUMBER as EMPID,
+                             T525577.CAL_YEAR as YR
+                        from 
+                             W_HR_ASSIGNMENT_D T2519170 /* Dim_W_HR_ASSIGNMENT_D */ ,
+                             W_YEAR_D T525577 /* Dim_W_YEAR_D */ ,
+                             W_WRKFC_EVT_MONTH_F T2535510 /* Fact_W_WRKFC_EVT_MONTH_F_Snapshot */ 
+                        where  
+                        ( 
+                          T525577.ROW_WID = T2535510.EVENT_YEAR_WID and 
+                          T2519170.ROW_WID = T2535510.HR_ASSIGNMENT_WID and 
+                          T2519170.W_ASSIGNMENT_TYPE_CODE = ''E'' and 
+                          T2535510.SNAPSHOT_IND = 1 and 
+                          T2535510.EVENT_MONTH_WID = case  when floor(T525577.CAL_YEAR_END_DT_WID / 100) > floor((select to_number(to_char(d.day_dt,''YYYYMMDD'')) from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE=''Current'' and d.CAL_MONTH_WID = m.ROW_WID) / 100) then floor((select to_number(to_char(d.day_dt,''YYYYMMDD'')) from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE=''Current'' and d.CAL_MONTH_WID = m.ROW_WID) / 100) else floor(T525577.CAL_YEAR_END_DT_WID / 100) end  and 
+                          T2535510.DELETE_FLG <> ''Y'' and 
+                          T525577.CAL_YEAR_START_DT >= TO_DATE(''2011-01-01 00:00:00'' , ''YYYY-MM-DD HH24:MI:SS'') and 
+                          (T2535510.SNAPSHOT_MONTH_END_IND in (1) or (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE=''Current'' and d.CAL_MONTH_WID = m.ROW_WID) < T2535510.EFFECTIVE_TO_DT) and 
+                          (T2535510.LAST_MONTH_IN_YEAR_IND in (1) or (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE=''Current'' and d.CAL_MONTH_WID = m.ROW_WID) < T2535510.EFFECTIVE_TO_DT) and 
+                          (T525577.CAL_YEAR in ('|| P_YR1 ||','|| P_YR2 ||','|| P_YR3 ||','|| P_YR4 ||','|| P_YR5 ||','|| P_YR6 ||')) and 
+                          T2535510.EFFECTIVE_FROM_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE=''Current'' and d.CAL_MONTH_WID = m.ROW_WID) 
+                        ) 
+                        group by T525577.CAL_YEAR, T2519170.ROW_WID, T2519170.ASSIGNMENT_NUMBER
+                    )
+                    select 
+                    EMPID,
+                    coalesce(PR_Y1,0) as PR_Y1,
+                    coalesce(PR_Y2,0) as PR_Y2,
+                    coalesce(PR_Y3,0) as PR_Y3,
+                    coalesce(PR_Y4,0) as PR_Y4,
+                    coalesce(PR_Y5,0) as PR_Y5,
+                    coalesce(PR_Y6,0) as PR_Y6
+                    from
+                    (
+                    select EMPID, YR,  PERF_RATING from SAWITH0
+                    )
+                    PIVOT (sum(PERF_RATING) for (YR) IN ('|| P_YR1 ||' as "PR_Y1",'|| P_YR2 ||' as "PR_Y2",'|| P_YR3 ||' as "PR_Y3",'|| P_YR4 ||' as "PR_Y4",'|| P_YR5 ||' as "PR_Y5",'|| P_YR6 ||' as "PR_Y6"))';
+                      
+          EXECUTE IMMEDIATE sql_stmt;
+          
+          select count(*) into v_count_post_run from AA_EMP_PERF_TRN_STG;
+          
+          IF v_count_post_run > 0 THEN
+            dbms_output.put_line('Records Inserted into AA_EMP_PERF_TRN_STG are:'||v_count_post_run);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+      
+      /*******************************************************************************
+      #7.Procedure for creating Promotion Table
+      ********************************************************************************/
+      PROCEDURE  AA_EMP_PROMO_PRC(p_start_year NUMBER,out_status OUT NUMBER) IS
+        P_YR1 number:=0;
+        P_YR2 number:=0;
+        P_YR3 number:=0;
+        P_YR4 number:=0;  
+        v_count number:=0;
+      BEGIN
+        P_YR1:= p_start_year;
+        P_YR2:= p_start_year + 1;
+        P_YR3:= p_start_year + 2;
+        P_YR4:= p_start_year + 3;
+  
+            /* Checking Whether table is empty or not */
+            select count(*) into v_count from AA_EMP_PROMO_TRN_STG;
+            
+            IF v_count > 0 then
+              EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_EMP_PROMO_TRN_STG';
+            END IF;      
+            
+            /* Inserting into AA_EMP_PROMO_TBL Table */     
+            INSERT INTO AA_EMP_PROMO_TRN_STG
+                    select distinct
+                         T2519170.ASSIGNMENT_NUMBER as EMPID,
+                         sum(T2535396.EVENT_IND) as NO_OF_PROMOTION_L4Y
+                    from 
+                         W_HR_ASSIGNMENT_D T2519170 /* Dim_W_HR_ASSIGNMENT_D */ ,
+                         W_MONTH_D T531732 /* Dim_W_MONTH_D */ ,
+                         W_WRKFC_EVT_MONTH_F T2535396 /* Fact_W_WRKFC_EVT_MONTH_F_Event */ ,
+                         W_WRKFC_EVENT_TYPE_D T2535403 /* Dim_W_WRKFC_EVENT_TYPE_D */ 
+                    where  
+                    ( 
+                      T531732.ROW_WID = T2535396.EVENT_MONTH_WID and 
+                      T2519170.ROW_WID = T2535396.HR_ASSIGNMENT_WID and 
+                      T2519170.W_ASSIGNMENT_TYPE_CODE = 'E' and 
+                      T2535396.EVENT_TYPE_RSN_WID = T2535403.ROW_WID and 
+                      T2535403.EVENT_CODE = 'ASG' and 
+                      T2535403.EVENT_REASON_CODE = 'EMP_ASSIGN_REASON:PRM' and 
+                      0 < T2535403.ROW_WID and 
+                      T2535396.DELETE_FLG <> 'Y' and 
+                      T531732.CAL_MONTH_START_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) and 
+                      (T531732.CAL_YEAR in (P_YR1,P_YR2,P_YR3,P_YR4)) and 
+                      T2535396.EFFECTIVE_FROM_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID)
+                    ) 
+                    group by T2519170.ASSIGNMENT_NUMBER;
+                      
+          IF SQL%ROWCOUNT > 0 THEN
+            dbms_output.put_line('Records Inserted into AA_EMP_PROMO_TRN_STG are:'||sql%ROWCOUNT);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+      
+  
+      /*******************************************************************************
+      #8.Procedure for creating Salary Revision Table
+      ********************************************************************************/
+      PROCEDURE  AA_EMP_SALREV_PRC(p_start_year NUMBER,out_status OUT NUMBER) IS
+        P_YR1 number:=0;
+        P_YR2 number:=0;
+        P_YR3 number:=0;
+        P_YR4 number:=0;  
+        v_count number:=0;
+      BEGIN
+        P_YR1:= p_start_year;
+        P_YR2:= p_start_year + 1;
+        P_YR3:= p_start_year + 2;
+        P_YR4:= p_start_year + 3;
+  
+            /* Checking Whether table is empty or not */
+            select count(*) into v_count from AA_EMP_SALREV_TRN_STG;
+            
+            IF v_count > 0 then
+              EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_EMP_SALREV_TRN_STG';
+            END IF;      
+            
+            /* Inserting into AA_EMP_PERFORMANCE_TBL Table */      
+            INSERT INTO AA_EMP_SALREV_TRN_STG
+                    select
+                         T2519170.ASSIGNMENT_NUMBER as EMPID,
+                         sum(T2535396.EVENT_IND) as NO_OF_SALREV_L4Y
+                    from 
+                         W_HR_ASSIGNMENT_D T2519170 /* Dim_W_HR_ASSIGNMENT_D */ ,
+                         W_MONTH_D T531732 /* Dim_W_MONTH_D */ ,
+                         W_WRKFC_EVT_MONTH_F T2535396 /* Fact_W_WRKFC_EVT_MONTH_F_Event */ ,
+                         W_WRKFC_EVENT_TYPE_D T2535403 /* Dim_W_WRKFC_EVENT_TYPE_D */ 
+                    where  
+                    ( 
+                      T531732.ROW_WID = T2535396.EVENT_MONTH_WID and 
+                      T2519170.ROW_WID = T2535396.HR_ASSIGNMENT_WID and 
+                      T2519170.W_ASSIGNMENT_TYPE_CODE = 'E' and 
+                      T2535396.EVENT_TYPE_RSN_WID = T2535403.ROW_WID and 
+                      T2535403.EVENT_REASON_CODE = 'PROPOSAL_REASON:SALREV' and 
+                      0 < T2535403.ROW_WID and T2535396.DELETE_FLG <> 'Y' and 
+                      T531732.CAL_MONTH_START_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) and 
+                      (T531732.CAL_YEAR in (P_YR1,P_YR2,P_YR3,P_YR4)) and 
+                      T2535396.EFFECTIVE_FROM_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) 
+                    ) 
+                    group by T2519170.ASSIGNMENT_NUMBER;
+                      
+          IF SQL%ROWCOUNT > 0 THEN
+            dbms_output.put_line('Records Inserted into AA_EMP_SALREV_TRN_STG are:'||sql%ROWCOUNT);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+  
+      /*******************************************************************************
+      #9.Procedure for creating Sick Leaves Table - PIVOT
+      ********************************************************************************/
+      PROCEDURE  AA_EMP_SICK_LEAVES_PRC(p_start_year NUMBER,out_status OUT NUMBER) IS
+        sql_stmt CLOB:='';
+        P_YR1 number:=0;
+        P_YR2 number:=0;
+        P_YR3 number:=0;
+        P_YR4 number:=0;  
+        v_count number:=0;
+        v_count_post_run number:=0;
+        v_tbl_name VARCHAR2(50):= ''; 
+        ex EXCEPTION;
+      BEGIN
+        P_YR1:= p_start_year;
+        P_YR2:= p_start_year + 1;
+        P_YR3:= p_start_year + 2;
+        P_YR4:= p_start_year + 3;
+        --v_tbl_name := 'AA_EMP_SICK_LEAVES_TBL';
+    
+          /* Checking Whether table is empty or not */
+        select count(*) into v_count from AA_EMP_SICK_LEAVES_TRN_STG;
+            
+        IF v_count > 0 then
+            EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_EMP_SICK_LEAVES_TRN_STG';
+        END IF;
+            
+        sql_stmt:= 'INSERT INTO AA_EMP_SICK_LEAVES_TRN_STG
+                    WITH SAWITH0 AS
+                    (
+                               select 
+                               T525577.CAL_YEAR as YR,
+                               T2519170.ASSIGNMENT_NUMBER as EMPID,
+                               sum(case  when T2554202.DAYS_NOTIFIED > 0 then 0 else T2554202.DAYS_DURATION end ) as UNNOTF_SCK_ABS_DAYS_L4Y,
+                               sum(case  when T2554202.DAYS_NOTIFIED > 0 then T2554202.DAYS_DURATION else 0 end ) as NOTF_SCK_ABS_DAYS_L4Y,
+                               sum(T2554202.DAYS_DURATION) as ABSENCE_DAYS
+                               from 
+                               W_HR_ASSIGNMENT_D T2519170 /* Dim_W_HR_ASSIGNMENT_D */ ,
+                               W_YEAR_D T525577 /* Dim_W_YEAR_D */ ,
+                               W_ABSENCE_TYPE_RSN_D T2554199 /* Dim_W_ABSENCE_TYPE_RSN_D */ ,
+                               W_ABSENCE_EVENT_F T2554202 /* Fact_W_ABSENCE_EVENT_F_Event */ 
+                               where  
+                                ( 
+                                  T525577.ROW_WID = T2554202.ABSENCE_YEAR_WID and 
+                                  T2519170.ROW_WID = T2554202.ASSIGNMENT_WID and 
+                                  T2519170.W_ASSIGNMENT_TYPE_CODE = ''E'' and 
+                                  T2554199.ROW_WID = T2554202.ABSENCE_TYPE_RSN_WID and 
+                                  T2554199.ABSENCE_TYPE_CODE = ''1114'' and 
+                                  T2554202.DELETE_FLG <> ''Y'' and
+                                  T525577.CAL_YEAR in ('|| P_YR1 ||','|| P_YR2 ||','|| P_YR3 ||','|| P_YR4 ||')        
+                                ) 
+                                group by 
+                                T525577.CAL_YEAR,T2519170.ASSIGNMENT_NUMBER
+                                order by 
+                                T525577.CAL_YEAR,T2519170.ASSIGNMENT_NUMBER
+                    )
+                    select 
+                    EMPID,
+                    sum(coalesce(SICKLV_Y1,0)) as SICKLV_Y1,
+                    sum(coalesce(SICKLV_Y2,0)) as SICKLV_Y2,
+                    sum(coalesce(SICKLV_Y3,0)) as SICKLV_Y3,
+                    sum(coalesce(SICKLV_Y4,0)) as SICKLV_Y4
+                    from
+                    (
+                      select EMPID,UNNOTF_SCK_ABS_DAYS_L4Y,NOTF_SCK_ABS_DAYS_L4Y,ABSENCE_DAYS,YR from SAWITH0
+                    )
+                    PIVOT 
+                    (
+                      SUM(ABSENCE_DAYS) 
+                      FOR (YR) IN ('|| P_YR1 ||' as "SICKLV_Y1",'|| P_YR2 ||' as "SICKLV_Y2",'|| P_YR3 ||' as "SICKLV_Y3",'|| P_YR4 ||' as "SICKLV_Y4")
+                    )
+                    group by EMPID';
+        
+         EXECUTE IMMEDIATE sql_stmt;         
+         select count(*) into v_count_post_run from AA_EMP_SICK_LEAVES_TRN_STG; 
+         
+          IF v_count_post_run > 0 THEN        
+            dbms_output.put_line('Records Inserted into AA_EMP_SICK_LEAVES_TRN_STG are:'||v_count_post_run);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+
+      /*******************************************************************************
+      #9.Procedure for creating Unpaid Leaves Table - PIVOT
+      ********************************************************************************/
+      PROCEDURE AA_EMP_UNPAID_LEAVES_PRC(p_start_year NUMBER,out_status OUT NUMBER) IS      
+        sql_stmt CLOB:='';
+        P_YR1 number:=0;
+        P_YR2 number:=0;
+        P_YR3 number:=0;
+        P_YR4 number:=0;  
+        v_count number:=0;
+        v_count_post_run number:=0;
+        v_tbl_name VARCHAR2(50):= ''; 
+        ex EXCEPTION;
+      BEGIN
+        P_YR1:= p_start_year;
+        P_YR2:= p_start_year + 1;
+        P_YR3:= p_start_year + 2;
+        P_YR4:= p_start_year + 3;
+    
+          /* Checking Whether table is empty or not */
+        select count(*) into v_count from AA_EMP_UP_LEAVES_TRN_STG;
+            
+        IF v_count > 0 then
+            EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_EMP_UP_LEAVES_TRN_STG';
+        END IF;
+            
+        sql_stmt:= 'INSERT INTO AA_EMP_UP_LEAVES_TRN_STG
+                    /* Unpaid Leaves */
+                    WITH SAWITH0 AS
+                    (
+                          select 
+                          T525577.CAL_YEAR as YR,
+                          T2519170.ASSIGNMENT_NUMBER as EMPID,
+                          sum(case  when T2554202.DAYS_NOTIFIED > 0 then 0 else T2554202.DAYS_DURATION end ) as UNNOTF_UP_L4Y,
+                          sum(case  when T2554202.DAYS_NOTIFIED > 0 then T2554202.DAYS_DURATION else 0 end ) as NOTF_UP_L4Y,
+                          sum(T2554202.DAYS_DURATION) as ABSENCE_DAYS
+                          from 
+                               W_HR_ASSIGNMENT_D T2519170 /* Dim_W_HR_ASSIGNMENT_D */ ,
+                               W_YEAR_D T525577 /* Dim_W_YEAR_D */ ,
+                               W_ABSENCE_TYPE_RSN_D T2554199 /* Dim_W_ABSENCE_TYPE_RSN_D */ ,
+                               W_ABSENCE_EVENT_F T2554202 /* Fact_W_ABSENCE_EVENT_F_Event */ 
+                          where  
+                          ( 
+                              T525577.ROW_WID = T2554202.ABSENCE_YEAR_WID and 
+                              T2519170.ROW_WID = T2554202.ASSIGNMENT_WID and 
+                              T2519170.W_ASSIGNMENT_TYPE_CODE = ''E'' and 
+                              T2554199.ROW_WID = T2554202.ABSENCE_TYPE_RSN_WID and 
+                              T2554199.ABSENCE_TYPE_CODE = ''1119'' and 
+                              (T525577.CAL_YEAR in ('|| P_YR1 ||','|| P_YR2 ||','|| P_YR3 ||','|| P_YR4 ||')) and 
+                              T2554202.DELETE_FLG <> ''Y'' 
+                          ) 
+                          group by T525577.CAL_YEAR, T2519170.ASSIGNMENT_NUMBER
+                          order by T525577.CAL_YEAR,T2519170.ASSIGNMENT_NUMBER
+                    )                    
+                    SELECT
+                    EMPID,
+                    sum(coalesce(UNPLV_Y1_ABS_DAYS,0)) as UNPLV_Y1,
+                    sum(coalesce(UNPLV_Y2_ABS_DAYS,0)) as UNPLV_Y2,
+                    sum(coalesce(UNPLV_Y3_ABS_DAYS,0)) as UNPLV_Y3,
+                    sum(coalesce(UNPLV_Y4_ABS_DAYS,0)) as UNPLV_Y4,
+                    sum(coalesce(UNPLV_Y1_UNNOTF_DAYS,0)) as UNPLV_UNF_Y1,
+                    sum(coalesce(UNPLV_Y2_UNNOTF_DAYS,0)) as UNPLV_UNF_Y2,
+                    sum(coalesce(UNPLV_Y3_UNNOTF_DAYS,0)) as UNPLV_UNF_Y3,
+                    sum(coalesce(UNPLV_Y4_UNNOTF_DAYS,0)) as UNPLV_UNF_Y4 
+                    FROM
+                    (
+                      SELECT 
+                      EMPID,
+                      NOTF_UP_L4Y,
+                      UNNOTF_UP_L4Y,
+                      ABSENCE_DAYS,
+                      YR 
+                      FROM SAWITH0
+                    )
+                    PIVOT 
+                    (
+                       SUM(ABSENCE_DAYS) as ABS_DAYS,SUM(UNNOTF_UP_L4Y) as UNNOTF_DAYS
+                       FOR (YR) IN ('|| P_YR1 ||' as "UNPLV_Y1", '|| P_YR2 ||' as "UNPLV_Y2",'|| P_YR3 ||' as "UNPLV_Y3",'|| P_YR4 ||' as "UNPLV_Y4")
+                    )
+                    group by EMPID';
+        
+         EXECUTE IMMEDIATE sql_stmt;         
+         select count(*) into v_count_post_run from AA_EMP_UP_LEAVES_TRN_STG; 
+         
+          IF v_count_post_run > 0 THEN        
+            dbms_output.put_line('Records Inserted into AA_EMP_UP_LEAVES_TRN_STG are:'||v_count_post_run);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+
+      /*******************************************************************************
+      #9.Procedure for creating Unauthorized Leaves Table - PIVOT
+      ********************************************************************************/
+      PROCEDURE AA_EMP_UNAUTH_LEAVES_PRC(p_start_year NUMBER,out_status OUT NUMBER) IS
+        sql_stmt CLOB:='';
+        P_YR1 number:=0;
+        P_YR2 number:=0;
+        P_YR3 number:=0;
+        P_YR4 number:=0;  
+        v_count number:=0;
+        v_count_post_run number:=0;
+        v_tbl_name VARCHAR2(50):= ''; 
+        ex EXCEPTION;
+      BEGIN
+        P_YR1:= p_start_year;
+        P_YR2:= p_start_year + 1;
+        P_YR3:= p_start_year + 2;
+        P_YR4:= p_start_year + 3;
+    
+          /* Checking Whether table is empty or not */
+        select count(*) into v_count from AA_EMP_UNAUTH_LV_TRN_STG;
+            
+        IF v_count > 0 then
+            EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_EMP_UNAUTH_LV_TRN_STG';
+        END IF;
+            
+        sql_stmt:= 'INSERT INTO AA_EMP_UNAUTH_LV_TRN_STG
+                    WITH SAWITH0 AS
+                    (
+                          select 
+                          T525577.CAL_YEAR as YR,
+                          T2519170.ASSIGNMENT_NUMBER as EMPID,
+                          sum(case  when T2554202.DAYS_NOTIFIED > 0 then 0 else T2554202.DAYS_DURATION end ) as UNNOTF_L4Y,
+                          sum(case  when T2554202.DAYS_NOTIFIED > 0 then T2554202.DAYS_DURATION else 0 end ) as NOTF_L4Y,
+                          sum(T2554202.DAYS_DURATION) as ABSENCE_DAYS
+                          from 
+                               W_HR_ASSIGNMENT_D T2519170 /* Dim_W_HR_ASSIGNMENT_D */ ,
+                               W_YEAR_D T525577 /* Dim_W_YEAR_D */ ,
+                               W_ABSENCE_TYPE_RSN_D T2554199 /* Dim_W_ABSENCE_TYPE_RSN_D */ ,
+                               W_ABSENCE_EVENT_F T2554202 /* Fact_W_ABSENCE_EVENT_F_Event */ 
+                          where  
+                          ( 
+                              T525577.ROW_WID = T2554202.ABSENCE_YEAR_WID and 
+                              T2519170.ROW_WID = T2554202.ASSIGNMENT_WID and 
+                              T2519170.W_ASSIGNMENT_TYPE_CODE = ''E'' and 
+                              T2554199.ROW_WID = T2554202.ABSENCE_TYPE_RSN_WID and 
+                              T2554199.ABSENCE_TYPE_CODE = ''1117'' and 
+                              (T525577.CAL_YEAR in ('|| P_YR1 ||','|| P_YR2 ||','|| P_YR3 ||','|| P_YR4 ||')) and 
+                              T2554202.DELETE_FLG <> ''Y'' 
+                          ) 
+                          group by T525577.CAL_YEAR, T2519170.ASSIGNMENT_NUMBER
+                          order by T525577.CAL_YEAR,T2519170.ASSIGNMENT_NUMBER
+                    )
+                    
+                    SELECT
+                    EMPID,
+                    sum(coalesce(UNAUTH_Y1_ABS_DAYS,0)) as UNAUTH_Y1,
+                    sum(coalesce(UNAUTH_Y2_ABS_DAYS,0)) as UNAUTH_Y2,
+                    sum(coalesce(UNAUTH_Y3_ABS_DAYS,0)) as UNAUTH_Y3,
+                    sum(coalesce(UNAUTH_Y4_ABS_DAYS,0)) as UNAUTH_Y4,
+                    sum(coalesce(UNAUTH_Y1_UNNOTF_DAYS,0)) as UNAUTH_UNF_Y1,
+                    sum(coalesce(UNAUTH_Y2_UNNOTF_DAYS,0)) as UNAUTH_UNF_Y2,
+                    sum(coalesce(UNAUTH_Y3_UNNOTF_DAYS,0)) as UNAUTH_UNF_Y3,
+                    sum(coalesce(UNAUTH_Y4_UNNOTF_DAYS,0)) as UNAUTH_UNF_Y4 
+                    FROM
+                    (
+                      SELECT 
+                      EMPID,
+                      NOTF_L4Y,
+                      UNNOTF_L4Y,
+                      ABSENCE_DAYS,
+                      YR 
+                      FROM SAWITH0
+                    )
+                    PIVOT 
+                    (
+                       SUM(ABSENCE_DAYS) as ABS_DAYS,SUM(UNNOTF_L4Y) as UNNOTF_DAYS
+                       FOR (YR) IN ('|| P_YR1 ||' as "UNAUTH_Y1", '|| P_YR2 ||' as "UNAUTH_Y2",'|| P_YR3 ||' as "UNAUTH_Y3",'|| P_YR4 ||' as "UNAUTH_Y4")
+                    )
+                    group by EMPID';
+        
+         EXECUTE IMMEDIATE sql_stmt;         
+         select count(*) into v_count_post_run from AA_EMP_UNAUTH_LV_TRN_STG; 
+         
+          IF v_count_post_run > 0 THEN        
+            dbms_output.put_line('Records Inserted into AA_EMP_UNAUTH_LV_TRN_STG are:'||v_count_post_run);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+
+      /*******************************************************************************
+      #10.Procedure for creating Supervisor Change Table
+      ********************************************************************************/
+      PROCEDURE  AA_EMP_SUPERVISOR_PRC(p_start_year NUMBER,out_status OUT NUMBER) IS
+        P_YR1 number:=0;
+        P_YR2 number:=0;
+        P_YR3 number:=0;
+        P_YR4 number:=0;  
+        v_count number:=0;
+      BEGIN
+        P_YR1:= p_start_year;
+        P_YR2:= p_start_year + 1;
+        P_YR3:= p_start_year + 2;
+        P_YR4:= p_start_year + 3;
+        
+            /* Checking Whether table is empty or not */
+            select count(*) into v_count from AA_EMP_SUPERVISOR_TRN_STG;
+            
+            IF v_count > 0 then
+              EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_EMP_SUPERVISOR_TRN_STG';
+            END IF;      
+            
+            /* Inserting into AA_EMP_SICK_LEAVES_TBL Table */        
+            INSERT INTO AA_EMP_SUPERVISOR_TRN_STG
+                    select 
+                         T2519170.ASSIGNMENT_NUMBER as EMPID,
+                         sum(T2535396.EVENT_IND) as NO_OF_SVR_CHNG_L4Y
+                    from 
+                         W_HR_ASSIGNMENT_D T2519170 /* Dim_W_HR_ASSIGNMENT_D */ ,
+                         W_MONTH_D T531732 /* Dim_W_MONTH_D */ ,
+                         W_WRKFC_EVT_MONTH_F T2535396 /* Fact_W_WRKFC_EVT_MONTH_F_Event */ ,
+                         W_WRKFC_EVENT_TYPE_D T2535403 /* Dim_W_WRKFC_EVENT_TYPE_D */ 
+                    where  
+                    ( 
+                      T531732.ROW_WID = T2535396.EVENT_MONTH_WID and 
+                      T2519170.ROW_WID = T2535396.HR_ASSIGNMENT_WID and 
+                      T2519170.W_ASSIGNMENT_TYPE_CODE = 'E' and 
+                      T2535396.EVENT_TYPE_RSN_WID = T2535403.ROW_WID and 
+                      T2535403.SUP_CHANGE_FLG = 'Y' and 
+                      0 < T2535403.ROW_WID and 
+                      T2535396.DELETE_FLG <> 'Y' and 
+                      T531732.CAL_MONTH_START_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) and 
+                      (T531732.CAL_YEAR in (P_YR1,P_YR2,P_YR3,P_YR4)) and 
+                      T2535396.EFFECTIVE_FROM_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) 
+                    ) 
+                    group by T2519170.ASSIGNMENT_NUMBER;
+                      
+          IF SQL%ROWCOUNT > 0 THEN
+            dbms_output.put_line('Records Inserted into AA_EMP_SUPERVISOR_TRN_STG are:'||sql%ROWCOUNT);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+      
+      /*******************************************************************************
+      #11.Procedure for creating Payroll Cost Master
+      ********************************************************************************/
+      PROCEDURE  AA_PAYROLL_COST_PRC(out_status OUT NUMBER) IS
+        v_count number:=0;    
+      BEGIN
+                /* Checking Whether table is empty or not */
+            select count(*) into v_count from AA_PAYROLL_COST_TRAIN;
+            
+            IF v_count > 0 then
+              EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_PAYROLL_COST_TRAIN';
+            END IF;
+      
+      /* Inserting Data into AA_EMP_MASTER_TMP_TEST_TBL */
+                    INSERT INTO AA_PAYROLL_COST_TRAIN
+                    select 
+                         T531732.PER_NAME_MONTH as YRMON,
+                         T531732.CAL_YEAR as YR,
+                         T531732.CAL_MONTH as MONTH_NUMBER,
+                         sum(T2637541.LOC_EXCHANGE_RATE * T2637541.PAY_GROSS) as PAYROLL_COST
+                    from 
+                         W_MONTH_D T531732 /* Dim_W_MONTH_D */ ,
+                         W_PAY_RUN_BAL_F T2637541 /* Fact_W_PAY_RUN_BAL_F */ 
+                    where  
+                    ( 
+                      T531732.ROW_WID = T2637541.BALANCE_MONTH_WID and 
+                      T2637541.DELETE_FLG <> 'Y' and 
+                      T531732.CAL_MONTH_START_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) and 
+                      T2637541.BALANCE_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) 
+                    ) 
+                    group by T531732.CAL_YEAR,T531732.CAL_MONTH, T531732.PER_NAME_MONTH
+                    order by T531732.CAL_YEAR,T531732.CAL_MONTH, T531732.PER_NAME_MONTH;
+                      
+          IF SQL%ROWCOUNT > 0 THEN
+            dbms_output.put_line('Records Inserted into AA_PAYROLL_COST_TRAIN are:'||sql%ROWCOUNT);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+ 
+       /*******************************************************************************
+      #11.Procedure for creating Payroll Cost Department Master
+      ********************************************************************************/
+      PROCEDURE  AA_PAYROLL_DEPT_COST_PRC(p_start_year NUMBER,p_end_year NUMBER,out_status OUT NUMBER) IS
+        v_count number:=0; 
+        v_count1 number:=0;
+      BEGIN
+                /* Checking Whether table is empty or not */
+            select count(*) into v_count from AA_PAYROLL_COST_DEPT_ALL_TMP;
+            select count(*) into v_count from AA_PAYROLL_COST_DEPT_TRAIN;
+            
+            IF v_count > 0 then
+              EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_PAYROLL_COST_DEPT_ALL_TMP';
+            END IF;  
+
+            IF v_count1 > 0 then
+              EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_PAYROLL_COST_DEPT_TRAIN';
+            END IF; 
+            
+            /* Query to Insert record in AA_PAYROLL_COST_DEPT_ALL_TMP */
+            INSERT INTO AA_PAYROLL_COST_DEPT_ALL_TMP
+            WITH 
+            SAWITH0 AS (select sum(T2637541.LOC_EXCHANGE_RATE * T2637541.PAY_VARIABLE) as c1,
+                 sum(T2637541.LOC_EXCHANGE_RATE * T2637541.PAY_BASE) as c2,
+                 sum(T2637541.LOC_EXCHANGE_RATE * T2637541.PAY_NET) as c3,
+                 sum(T2637541.LOC_EXCHANGE_RATE * T2637541.PAY_GROSS) as c4,
+                 sum(T2637541.LOC_EXCHANGE_RATE * T2637541.PAY_HOLIDAY) as c5,
+                 T531732.PER_NAME_MONTH as c7,
+                 T531732.CAL_MONTH as c8,
+                 T531732.CAL_YEAR as c9,
+                 T2541780.ORG_HIER12_NUM as c10,
+                 T2541780.DATASOURCE_NUM_ID as c12
+            from 
+                 (SELECT
+                  DATASOURCE_NUM_ID,
+                  INTEGRATION_ID,
+                  ORG_DESCR,
+                  ORG_NAME,
+                  LANGUAGE_CODE
+                  FROM 
+                  W_INT_ORG_D_TL
+                  WHERE
+                  LANGUAGE_CODE = 'US') T2528578,
+                 (
+                     SELECT BASE_ORG_NUM, DATASOURCE_NUM_ID, HIERARCHY_NAME, HIERARCHY_VERSION,INTEGRATION_ID,
+                      ORG_HIER10_NUM,ORG_HIER11_NUM,
+                      ORG_HIER12_NUM,ORG_HIER13_NUM,
+                      ORG_HIER1_NUM,ORG_HIER2_NUM,
+                      ORG_HIER3_NUM,ORG_HIER4_NUM,
+                      ORG_HIER5_NUM,ORG_HIER6_NUM,
+                      ORG_HIER7_NUM,ORG_HIER8_NUM,
+                      ORG_HIER9_NUM, ORG_TOP_NUM,SCD1_WID
+                      FROM
+                      W_INT_ORG_DH
+                      WHERE
+                      ROW_WID = 0 OR (HR_ORG_FLG= 'Y' AND 
+                                      W_HIERARCHY_CLASS = 'HR-ORG' AND 
+                                      HIERARCHY_NAME = 'ETC Primary Hierarchy' AND 
+                                      HIERARCHY_VERSION = 1 AND
+                                      CURRENT_FLG = 'Y')
+                  ) T2541780,
+                  W_INT_ORG_D T2622830 /* Dim_W_INT_ORG_D_Department */ ,
+                  W_MONTH_D T531732 /* Dim_W_MONTH_D */ ,
+                  W_PAY_RUN_BAL_F T2637541 /* Fact_W_PAY_RUN_BAL_F */ 
+            where  
+            ( 
+              T2528578.DATASOURCE_NUM_ID = T2622830.DATASOURCE_NUM_ID and 
+              T531732.ROW_WID = T2637541.BALANCE_MONTH_WID and 
+              T2528578.INTEGRATION_ID = T2622830.INTEGRATION_ID and 
+              T2541780.SCD1_WID = T2622830.SCD1_WID and 
+              T2622830.SCD1_WID = T2637541.DEPARTMENT_WID and 
+              T2622830.CURRENT_FLG = 'Y' and 
+              T2637541.DELETE_FLG <> 'Y' and 
+              T2637541.BALANCE_DT < T2622830.EFFECTIVE_TO_DT and 
+              T531732.CAL_MONTH_START_DT <= (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) and 
+              (T2622830.HR_ORG_FLG in ('U', 'Y')) and 
+              T2637541.BALANCE_DT between T2622830.EFFECTIVE_FROM_DT and (select d.DAY_DT from W_DAY_D d, W_MONTH_D m where D.W_CURRENT_CAL_DAY_CODE='Current' and d.CAL_MONTH_WID = m.ROW_WID) 
+            ) 
+            group by 
+            T531732.CAL_MONTH, 
+            T531732.CAL_YEAR, 
+            T531732.PER_NAME_MONTH, 
+            T2541780.DATASOURCE_NUM_ID, 
+            T2541780.ORG_HIER12_NUM),
+            SAWITH1 AS (select T2581275.Name as c1,
+                         T2581275.ID as c2,
+                         T2581275.Source_ID as c3
+                         from 
+                             (SELECT
+                              INTEGRATION_ID as ID,
+                              LANGUAGE_CODE as Language_Code,
+                              DATASOURCE_NUM_ID as Source_ID,
+                              ORG_NAME as Name,
+                              ORG_DESCR as Description
+                              FROM
+                              W_INT_ORG_D_TL
+                              ) T2581275 where  ( T2581275.Language_Code = 'US' ) 
+                       ),
+            SAWITH2 AS (select D1.c1 as c1,
+                 D1.c2 as c2,
+                 D1.c3 as c3,
+                 D1.c4 as c4,
+                 D1.c5 as c5,
+                 D2.c1 as c6,
+                 D1.c7 as c7,
+                 D1.c8 as c8,
+                 D1.c9 as c9,
+                 D1.c10 as c10
+            from 
+                 SAWITH0 D1 inner join SAWITH1 D2 On D1.c10 = D2.c2 and D1.c12 = D2.c3),
+            SAWITH3 AS (select D1.c1 as c1,
+                 D1.c2 as c2,
+                 D1.c3 as c3,
+                 D1.c4 as c4,
+                 D1.c5 as c5,
+                 D1.c6 as c6,
+                 D1.c7 as c7,
+                 D1.c8 as c8,
+                 D1.c9 as c9,
+                 D1.c10 as c10,
+                 D1.c11 as c11
+            from 
+                 (select 0 as c1,
+                           D1.c6 as c2,
+                           D1.c7 as c3,
+                           D1.c8 as c4,
+                           D1.c9 as c5,
+                           D1.c10 as c6,
+                           nvl(D1.c5 , 0) + nvl(D1.c2 , 0) as c7,
+                           D1.c4 as c8,
+                           D1.c3 as c9,
+                           D1.c2 as c10,
+                           D1.c1 as c11,
+                           ROW_NUMBER() OVER (PARTITION BY D1.c6, D1.c7, D1.c8, D1.c9, D1.c10 ORDER BY D1.c6 ASC, D1.c7 ASC, D1.c8 ASC, D1.c9 ASC, D1.c10 ASC) as c12
+                      from 
+                           SAWITH2 D1
+                 ) D1
+            where  ( D1.c12 = 1 ) )
+            select 
+                 --D1.c1 as c1, 
+                 D1.c2 as DNAME, 
+                 D1.c3 as YRMON, 
+                 D1.c4 as MON_NUM, 
+                 D1.c5 as YR, 
+                 D1.c6 as DEPTNO, 
+                 D1.c7 as BASE_PAY, 
+                 D1.c8 as PAYROLL_COST, 
+                 D1.c9 as NET_PAY, 
+                 D1.c10 as REGULAR_PAY, 
+                 D1.c11 as VARIABLE_PAY 
+                 from 
+                 ( 
+                     select D1.c1 as c1,
+                     D1.c2 as c2,
+                     D1.c3 as c3,
+                     D1.c4 as c4,
+                     D1.c5 as c5,
+                     D1.c6 as c6,
+                     D1.c7 as c7,
+                     D1.c8 as c8,
+                     D1.c9 as c9,
+                     D1.c10 as c10,
+                     D1.c11 as c11
+                     from 
+                     SAWITH3 D1
+                order by c1, c5, c4, c3, c2, c6 ) D1 ;
+                
+            IF SQL%ROWCOUNT > 0 THEN      
+                INSERT INTO AA_PAYROLL_COST_DEPT_TRAIN
+                SELECT * FROM AA_PAYROLL_COST_DEPT_ALL_TMP
+                where
+                deptno in(
+                select distinct deptno from AA_PAYROLL_COST_DEPT_ALL_TMP where YR = p_start_year
+                intersect
+                select distinct deptno from AA_PAYROLL_COST_DEPT_ALL_TMP where YR = p_end_year
+                );       
+                
+                dbms_output.put_line('Records Inserted into AA_PAYROLL_COST_DEPT_TRAIN are:'||sql%ROWCOUNT);
+                COMMIT;
+            ELSE 
+              ROLLBACK;
+            END IF;
+
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;      
+            
+      /*******************************************************************************
+      #11.Procedure for creating THE COMMON Main Training Table
+      ********************************************************************************/
+      PROCEDURE  AA_COMMN_MDL_TRAIN_PRC(p_perf_start_dt VARCHAR2,p_perf_end_dt VARCHAR2,out_status OUT NUMBER) IS
+        v_count number:=0;
+      BEGIN
+            /* Checking Whether table is empty or not */
+            select count(*) into v_count from AA_COMMN_MDL_TRAIN_TBL;
+            
+            IF v_count > 0 then
+              EXECUTE IMMEDIATE 'TRUNCATE TABLE AA_COMMN_MDL_TRAIN_TBL';
+            END IF;
+      
+            /* Inserting Data into AA_EMP_MASTER_TMP_TEST_TBL */     
+                INSERT INTO AA_COMMN_MDL_TRAIN_TBL
+                    WITH qry as
+                    (
+                    select distinct 
+                    m.EMPID as EMPID,                      
+                    m.NATIONALITY as NATIONALITY,                                                                                                                                                                           
+                    m.ENAME as ENAME,                                                                                                                                                            
+                    m.GENDER as GENDER,                                                                                                                                                                            
+                    m.AGE as AGE,
+                    (CASE 
+                    WHEN (m.AGE < 20) then 'AGE_BAND_1'
+                    WHEN (m.AGE >=20 and m.AGE < 30) then 'AGE_BAND_2'
+                    WHEN (m.AGE >=30 and m.AGE < 40) then 'AGE_BAND_3'
+                    WHEN (m.AGE >=40 and m.AGE < 50) then 'AGE_BAND_4'
+                    WHEN (m.AGE >=50 and m.AGE < 60) then 'AGE_BAND_5'
+                    WHEN (m.AGE >=60) then 'AGE_BAND_6' END) as AGE_BAND, 
+                    m.MARITAL_STATUS as MARITAL_STATUS,                                                                                                                                                                     
+                    m.EDUCATION as EDUCATION,                                                                                                                                                                    
+                    m.DISABLED_FLG as DISABLED_FLG,                                                                                                                                                                
+                    m.DEPTNO as DEPTNO,                                                                                                                                                                           
+                    m.DEPT_NAME as CURR_DEPT_NAME,                                                                                                                                                                            
+                    m.ORIG_HIRE_DT as ORIG_HIRE_DT,                                                                                                                                                                                
+                    m.LAST_WORKED_DT as LAST_WORKED_DT,                                                                                                                                      
+                    nvl(m.TENURE,0) as TENURE,            
+                    (CASE 
+                    WHEN (nvl(m.TENURE,0) < 1) then 'TENURE_BAND_1' 
+                    WHEN (nvl(m.TENURE,0) >=1 and nvl(m.TENURE,0) < 2) then 'TENURE_BAND_2'
+                    WHEN (nvl(m.TENURE,0) >=2 and nvl(m.TENURE,0) < 5) then 'TENURE_BAND_3'
+                    WHEN (nvl(m.TENURE,0) >=5 and nvl(m.TENURE,0) < 10) then 'TENURE_BAND_4'
+                    WHEN (nvl(m.TENURE,0) >=10 and nvl(m.TENURE,0) < 15) then 'TENURE_BAND_5'
+                    WHEN (nvl(m.TENURE,0) >=15 and nvl(m.TENURE,0) < 20) then 'TENURE_BAND_6'
+                    WHEN (nvl(m.TENURE,0) >=20) then 'TENURE_BAND_7' ELSE 'NO_MATCH' END) as TENURE_BAND, 
+                    m.JOB_NAME as JOB_NAME, 
+                    nvl(t7.COMPA_Y1,0) as COMPA_YR1,
+                    nvl(t7.COMPA_Y2,0) as COMPA_YR2,
+                    nvl(t7.COMPA_Y3,0) as COMPA_YR3,
+                    nvl(t7.COMPA_Y4,0) as COMPA_YR4,
+                    ROUND((nvl(t7.COMPA_Y4,0) - nvl(t7.COMPA_Y1,0))/decode(nvl(t7.COMPA_Y1,0),0,1,nvl(t7.COMPA_Y1,0)),2) as CHNG_COMPA_L4Y,
+                    ROUND((nvl(t7.COMPA_Y4,0) - nvl(t7.COMPA_Y3,0))/decode(nvl(t7.COMPA_Y3,0),0,1,nvl(t7.COMPA_Y3,0)),2) as CHNG_COMPA_LY,
+                    (CASE 
+                    WHEN SIGN(nvl(t7.COMPA_Y4,0) - nvl(t7.COMPA_Y1,0)) = -1 THEN 'DECREASED' 
+                    WHEN SIGN(nvl(t7.COMPA_Y4,0) - nvl(t7.COMPA_Y1,0)) = 1 THEN 'INCREASED'
+                    ELSE 'SAME' END) AS CHNG_DIR_COMPA_L4Y,
+                    (CASE 
+                    WHEN SIGN(nvl(t7.COMPA_Y4,0) - nvl(t7.COMPA_Y3,0)) = -1 THEN 'DECREASED' 
+                    WHEN SIGN(nvl(t7.COMPA_Y4,0) - nvl(t7.COMPA_Y3,0)) = 1 THEN 'INCREASED'
+                    ELSE 'SAME' END) AS CHNG_DIR_COMPA_LY,
+                    (CASE 
+                    WHEN (nvl(t7.COMPA_Y1,0) < 70) THEN 'COMPA_BAND_1'
+                    WHEN (nvl(t7.COMPA_Y1,0) >= 70 AND nvl(t7.COMPA_Y1,0) < 80)  THEN 'COMPA_BAND_2'
+                    WHEN (nvl(t7.COMPA_Y1,0) >= 80 AND nvl(t7.COMPA_Y1,0) < 90)  THEN 'COMPA_BAND_3'
+                    WHEN (nvl(t7.COMPA_Y1,0) >= 90 AND nvl(t7.COMPA_Y1,0) < 100)  THEN 'COMPA_BAND_4'
+                    WHEN (nvl(t7.COMPA_Y1,0) >= 100 AND nvl(t7.COMPA_Y1,0) < 110)  THEN 'COMPA_BAND_5'
+                    WHEN (nvl(t7.COMPA_Y1,0) >= 110 AND nvl(t7.COMPA_Y1,0) < 120)  THEN 'COMPA_BAND_6'
+                    WHEN (nvl(t7.COMPA_Y1,0) >= 120)  THEN 'COMPA_BAND_7' ELSE 'NO_MATCH' END) as COMPA_BAND_YR1,
+                    (CASE 
+                    WHEN (nvl(t7.COMPA_Y2,0) < 70) THEN 'COMPA_BAND_1'
+                    WHEN (nvl(t7.COMPA_Y2,0) >= 70 AND nvl(t7.COMPA_Y2,0) < 80)  THEN 'COMPA_BAND_2'
+                    WHEN (nvl(t7.COMPA_Y2,0) >= 80 AND nvl(t7.COMPA_Y2,0) < 90)  THEN 'COMPA_BAND_3'
+                    WHEN (nvl(t7.COMPA_Y2,0) >= 90 AND nvl(t7.COMPA_Y2,0) < 100)  THEN 'COMPA_BAND_4'
+                    WHEN (nvl(t7.COMPA_Y2,0) >= 100 AND nvl(t7.COMPA_Y2,0) < 110)  THEN 'COMPA_BAND_5'
+                    WHEN (nvl(t7.COMPA_Y2,0) >= 110 AND nvl(t7.COMPA_Y2,0) < 120)  THEN 'COMPA_BAND_6'
+                    WHEN (nvl(t7.COMPA_Y2,0) >= 120)  THEN 'COMPA_BAND_7' ELSE 'NO_MATCH' END) as COMPA_BAND_YR2,
+                    (CASE 
+                    WHEN (nvl(t7.COMPA_Y3,0) < 70) THEN 'COMPA_BAND_1'
+                    WHEN (nvl(t7.COMPA_Y3,0) >= 70 AND nvl(t7.COMPA_Y3,0) < 80)  THEN 'COMPA_BAND_2'
+                    WHEN (nvl(t7.COMPA_Y3,0) >= 80 AND nvl(t7.COMPA_Y3,0) < 90)  THEN 'COMPA_BAND_3'
+                    WHEN (nvl(t7.COMPA_Y3,0) >= 90 AND nvl(t7.COMPA_Y3,0) < 100)  THEN 'COMPA_BAND_4'
+                    WHEN (nvl(t7.COMPA_Y3,0) >= 100 AND nvl(t7.COMPA_Y3,0) < 110)  THEN 'COMPA_BAND_5'
+                    WHEN (nvl(t7.COMPA_Y3,0) >= 110 AND nvl(t7.COMPA_Y3,0) < 120)  THEN 'COMPA_BAND_6'
+                    WHEN (nvl(t7.COMPA_Y3,0) >= 120)  THEN 'COMPA_BAND_7' ELSE 'NO_MATCH' END) as COMPA_BAND_YR3,
+                    (CASE 
+                    WHEN (nvl(t7.COMPA_Y4,0) < 70) THEN 'COMPA_BAND_1'
+                    WHEN (nvl(t7.COMPA_Y4,0) >= 70 AND nvl(t7.COMPA_Y4,0) < 80)  THEN 'COMPA_BAND_2'
+                    WHEN (nvl(t7.COMPA_Y4,0) >= 80 AND nvl(t7.COMPA_Y4,0) < 90)  THEN 'COMPA_BAND_3'
+                    WHEN (nvl(t7.COMPA_Y4,0) >= 90 AND nvl(t7.COMPA_Y4,0) < 100)  THEN 'COMPA_BAND_4'
+                    WHEN (nvl(t7.COMPA_Y4,0) >= 100 AND nvl(t7.COMPA_Y4,0) < 110)  THEN 'COMPA_BAND_5'
+                    WHEN (nvl(t7.COMPA_Y4,0) >= 110 AND nvl(t7.COMPA_Y4,0) < 120)  THEN 'COMPA_BAND_6'
+                    WHEN (nvl(t7.COMPA_Y4,0) >= 120)  THEN 'COMPA_BAND_7' ELSE 'NO_MATCH' END) as COMPA_BAND_YR4,
+                    nvl(t2.PR_Y1,0) as PERF_YR1,                                                                                                                                                                                     
+                    nvl(t2.PR_Y2,0) as PERF_YR2,                                                                                                                                                                                       
+                    nvl(t2.PR_Y3,0) as PERF_YR3,                                                                                                                                                                                       
+                    nvl(t2.PR_Y4,0) as PERF_YR4,
+                    (nvl(t2.PR_Y1,0) + nvl(t2.PR_Y2,0) + nvl(t2.PR_Y3,0) + nvl(t2.PR_Y4,0))/(DECODE(SIGN(nvl(m.TENURE,0) - 3),+1,4,nvl(m.TENURE,0))) as AVG_PERF_L4Y,
+                    --(nvl(t2.PR_Y1,0)*0.1 + nvl(t2.PR_Y2,0)*0.2 + nvl(t2.PR_Y3,0)*0.3 + nvl(t2.PR_Y4,0)*0.4) as WT_AVG_PERF_L4Y,
+                    'PR_'||nvl(t2.PR_Y1,0) as PERF_BAND_YR1,                                                                                                                                                                                     
+                    'PR_'||nvl(t2.PR_Y2,0) as PERF_BAND_YR2,                                                                                                                                                                                       
+                    'PR_'||nvl(t2.PR_Y3,0) as PERF_BAND_YR3,                                                                                                                                                                                       
+                    'PR_'||nvl(t2.PR_Y4,0) as PERF_BAND_YR4,
+                    nvl(t3.SICKLV_Y1,0) as SICKLV_YR1,                                                                                                                                                                                  
+                    nvl(t3.SICKLV_Y2,0) as SICKLV_YR2,                                                                                                                                                                                    
+                    nvl(t3.SICKLV_Y3,0) as SICKLV_YR3,                                                                                                                                                                                         
+                    nvl(t3.SICKLV_Y4,0) as SICKLV_YR4, 
+                    (nvl(t3.SICKLV_Y1,0) + nvl(t3.SICKLV_Y2,0) + nvl(t3.SICKLV_Y3,0) + nvl(t3.SICKLV_Y4,0))/DECODE(SIGN(nvl(m.TENURE,0) - 3),+1,4,nvl(m.TENURE,0)) as AVG_SICKLV_L4Y,
+                    nvl(ROUND((nvl(t3.SICKLV_Y4,0) - nvl(t3.SICKLV_Y1,0))/decode(nvl(t3.SICKLV_Y1,0),0,1,nvl(t3.SICKLV_Y1,0)),2),0) as CHNG_SICKLV_L4Y,
+                    nvl(ROUND((nvl(t3.SICKLV_Y4,0) - nvl(t3.SICKLV_Y3,0))/decode(nvl(t3.SICKLV_Y3,0),0,1,nvl(t3.SICKLV_Y3,0)),2),0) as CHNG_SICKLV_LY,                  
+                    (CASE 
+                    WHEN SIGN(nvl(t3.SICKLV_Y4,0) - nvl(t3.SICKLV_Y1,0)) = -1 THEN 'DECREASED' 
+                    WHEN SIGN(nvl(t3.SICKLV_Y4,0) - nvl(t3.SICKLV_Y1,0)) = 1 THEN 'INCREASED'
+                    ELSE 'SAME' END) AS CHNG_DIR_SICKLV_L4Y,
+                    (CASE 
+                    WHEN SIGN(nvl(t3.SICKLV_Y4,0) - nvl(t3.SICKLV_Y3,0)) = -1 THEN 'DECREASED' 
+                    WHEN SIGN(nvl(t3.SICKLV_Y4,0) - nvl(t3.SICKLV_Y3,0)) = 1 THEN 'INCREASED'
+                    ELSE 'SAME' END) AS CHNG_DIR_SICKLV_LY,
+                    nvl(t8.UNPLV_Y1,0) as UNPLV_YR1,
+                    nvl(t8.UNPLV_Y2,0) as UNPLV_YR2,
+                    nvl(t8.UNPLV_Y3,0) as UNPLV_YR3,
+                    nvl(t8.UNPLV_Y4,0) as UNPLV_YR4,
+                    (nvl(t8.UNPLV_Y1,0) + nvl(t8.UNPLV_Y2,0) + nvl(t8.UNPLV_Y3,0) + nvl(t8.UNPLV_Y4,0))/DECODE(SIGN(nvl(m.TENURE,0) - 3),+1,4,nvl(m.TENURE,0)) as AVG_UNPLV_L4Y,
+                    nvl(t9.UNAUTH_Y1,0) as UNAUTH_YR1,
+                    nvl(t9.UNAUTH_Y2,0) as UNAUTH_YR2,
+                    nvl(t9.UNAUTH_Y3,0) as UNAUTH_YR3,
+                    nvl(t9.UNAUTH_Y4,0) as UNAUTH_YR4,
+                    (nvl(t9.UNAUTH_Y1,0) + nvl(t9.UNAUTH_Y2,0) + nvl(t9.UNAUTH_Y3,0) + nvl(t9.UNAUTH_Y4,0))/DECODE(SIGN(nvl(m.TENURE,0) - 3),+1,4,nvl(m.TENURE,0)) as AVG_UNAUTH_L4Y,
+                    nvl(t1.NO_OF_DEPT_CNG_L4Y,0) as DEPT_CHNG_L4Y,
+                    nvl(t4.NO_OF_PROMOTION_L4Y,0) as PROMO_L4Y,
+                    nvl(t6.NO_OF_SALREV_L4Y,0) as SALREV_L4Y,
+                    nvl(t5.NO_OF_SVR_CHNG_L4Y,0) as SVR_CHNG_L4Y,
+                    m.ISCHURN as ISCHURN,                  
+                    (CASE 
+                    WHEN nvl(t2.PR_Y5,0) IN (1,2) THEN 'RATING_2'
+                    WHEN nvl(t2.PR_Y5,0) = 3 THEN 'RATING_3'
+                    WHEN nvl(t2.PR_Y5,0) = 4 THEN 'RATING_4'
+                    WHEN nvl(t2.PR_Y5,0) = 5 THEN 'RATING_5'
+                    END) as PERF_CATEG1,
+                    (CASE 
+                    WHEN nvl(t2.PR_Y5,0) IN (0,1) THEN 'POOR-PERFORMER'
+                    WHEN nvl(t2.PR_Y5,0) = 2 THEN 'INCONSISTENT'
+                    WHEN nvl(t2.PR_Y5,0) = 3 THEN 'MEETS-EXPECTATION'
+                    WHEN nvl(t2.PR_Y5,0) = 4 THEN 'EXCELLENT'
+                    WHEN nvl(t2.PR_Y5,0) = 5 THEN 'EXCEPTIONAL'
+                    END) as PERF_CATEG2,
+                    (CASE 
+                    WHEN (nvl(t2.PR_Y5,0) = 4 OR nvl(t2.PR_Y5,0) = 5) AND 
+                         (nvl(t2.PR_Y4,0) = 4 OR nvl(t2.PR_Y4,0) = 5 OR nvl(t2.PR_Y4,0) = 0) AND 
+                         (nvl(t2.PR_Y3,0) = 4 OR nvl(t2.PR_Y3,0) = 5 OR nvl(t2.PR_Y3,0) = 0) THEN 'TOP-PERFORMER'
+                    WHEN (nvl(t2.PR_Y5,0) = 1 OR nvl(t2.PR_Y5,0) = 2) AND 
+                         (nvl(t2.PR_Y4,0) = 1 OR nvl(t2.PR_Y4,0) = 2) THEN 'POOR-PERFORMER'
+                    ELSE 'OTHERS' END) as PERF_CATEG3
+                    FROM
+                    (select * from AA_EMP_MASTER_TRN_STG where 
+                    (last_worked_dt between to_date(p_perf_start_dt,'YYYY-MM-DD') and to_date(p_perf_end_dt,'YYYY-MM-DD')) OR last_worked_dt is null) m /* Employee Master Table */
+                    LEFT OUTER JOIN AA_EMP_DEPT_CHNG_TRN_STG t1   ON m.empid = t1.empid   /* Dept Change Table */
+                    LEFT OUTER JOIN AA_EMP_PERF_TRN_STG t2 ON m.empid = t2.empid /* Peformance Rating Table */
+                    LEFT OUTER JOIN AA_EMP_SICK_LEAVES_TRN_STG t3 ON m.empid = t3.empid /* Sick Leaves Table */
+                    LEFT OUTER JOIN AA_EMP_PROMO_TRN_STG t4       ON m.empid = t4.empid /* Promotion Table */
+                    LEFT OUTER JOIN AA_EMP_SUPERVISOR_TRN_STG t5  ON m.empid = t5.empid  /* Supervisor change Table */
+                    LEFT OUTER JOIN AA_EMP_SALREV_TRN_STG t6      ON m.empid = t6.empid  /* Salary Revision Table */
+                    LEFT OUTER JOIN AA_EMP_COMPA_TRN_STG t7       ON m.empid = t7.empid  /* Compa Ratio Table */
+                    LEFT OUTER JOIN AA_EMP_UP_LEAVES_TRN_STG t8   ON m.empid = t8.empid  /* Unpaid Leave Table */
+                    LEFT OUTER JOIN AA_EMP_UNAUTH_LV_TRN_STG t9   ON m.empid = t9.empid  /* Unauthorized Leave Table */
+                    )
+                    SELECT * FROM qry
+                    WHERE 
+                    (NATIONALITY is not null) AND (GENDER is not null) AND (NATIONALITY IN ('Expat','National')) AND
+                    (MARITAL_STATUS is not null) AND nvl(TENURE,0) <> 0;
+          
+          IF SQL%ROWCOUNT > 0 THEN
+            dbms_output.put_line('Records Inserted into AA_COMMN_MDL_TRAIN_TBL are:'||sql%ROWCOUNT);
+            COMMIT;
+          ELSE 
+            ROLLBACK;
+          END IF;
+          out_status:=1; /* Shows Success */  
+      EXCEPTION        
+          WHEN OTHERS THEN
+            out_status:=0; /* Shows Fail */
+            --dbms_output.put_line(SQLCODE(SQLERRM));
+      END;
+END AA_TRAINING_DATA_PREP_PKG;
