@@ -1,0 +1,805 @@
+create or replace PACKAGE AA_USECASE_ALGO_LIB_PKG AS
+/********************************************************* 
+Usecase 1 - Employee Attrition Training - TESTED OK
+Author: Snehotosh Banerjee
+Date: 20/01/2017
+
+ORE Script Name:
+	CLASSRFCHURN
+	
+Packages:
+	randomForest # RandomForest Algorithm
+	caTools      # For Data Split
+	ROCR	       # Visualizing classifier performance in R
+	ggplot2      # Visualization
+	DMwR	       # SMOTE for Rare class Balancing
+	
+Algorithm:
+	RandomForest 
+	
+Output Tables:
+	AA_UC1_MDL_METRICS_TBL
+	AA_UC1_MDL_IMG_TBL
+
+ORE datastore:
+  dsRF_churn_store	
+*********************************************************/
+  PROCEDURE AA_UC1_TRAIN_PRC(p_sql VARCHAR2,
+                                               p_is_bal_reqd VARCHAR2,
+                                               p_perc_os NUMBER,
+                                               p_perc_us NUMBER,
+                                               p_trn_ratio NUMBER,
+                                               p_tgt_class_label VARCHAR2);
+                                               
+/*********************************************************
+Usecase 2 - Employee Performance Training - TESTED OK
+Author: Snehotosh Banerjee
+Date: 20/01/2017
+
+ORE Script Name:
+	CLASSRFCHURN
+	
+Packages:
+	randomForest # RandomForest Algorithm
+	caTools      # For Data Split
+	ROCR	     # Visualizing classifier performance in R
+	ggplot2      # Visualization
+	DMwR	     # SMOTE for Rare class Balancing
+	
+Algorithm:
+	RandomForest 
+	
+Output Tables:
+	AA_UC2_MDL_METRICS_TBL
+	AA_UC2_MDL_IMG_TBL
+
+ORE Datastore:
+  dsRF_perf_store
+**********************************************************/
+  PROCEDURE AA_UC2_TRAIN_PRC(p_sql VARCHAR2,
+                                               p_is_bal_reqd VARCHAR2,
+                                               p_perc_os NUMBER,
+                                               p_perc_us NUMBER,
+                                               p_trn_ratio NUMBER);                                             
+  
+/*********************************************************
+Usecase 3 - Employee Profiling - TESTED OK
+Author: Snehotosh Banerjee
+Date: 20/01/2017
+
+ORE Script Name:
+	CLUSTPROFILE
+	
+Packages:
+	cluster # for gower similarity and pam
+	Rtsne   # for t-SNE plot for Visualization
+	dplyr	  # Data wrangling
+	ggplot2 # Visualization
+	
+Algorithm:
+	PAM (Partition Around Medoids)
+	
+Output Tables:
+	AA_UC3_PNG_TBL
+	AA_UC3SUMMARY_CLUS2_TBL (Dynamic)
+	AA_UC3SUMMARY_CLUS1_TBL (Dynamic)
+	AA_UC3CLUS_REPRE_TBL
+	AA_UC3CLUS_INFO_TBL
+	AA_UC3CLUS_ASSIGNMENT_TBL
+
+ORE Datastore:
+  ds_cluster_store
+*********************************************************/
+  PROCEDURE AA_UC3_PRC(p_sql VARCHAR2,p_isDendoReqd VARCHAR2);
+
+  
+/*********************************************************
+
+Usecase 5 - Forecasting Payroll Cost - TESTED OK
+Author: Snehotosh Banerjee
+Date: 27/01/2017
+
+ORE Script Name:
+	PAYROLLTS
+	
+Packages:
+	fpp # Forecasting
+	zoo # Timeseries
+	
+Algorithm:
+	auto.arima
+  forecast
+  stl (Seasonal Decomposition by Loess)
+  
+Output Tables:
+  AA_UC5_FORECAST_TBL
+  AA_UC5_FORECAST_IMG_TBL
+
+Datastore:
+  dsRF_payroll_store
+*********************************************************/
+  PROCEDURE AA_UC5_PRC(p_sql VARCHAR2,
+                                        p_is_seasonal VARCHAR2,
+                                        p_ts_measure_col VARCHAR2,
+                                        p_ts_time_col VARCHAR2,                               
+                                        p_forecast_period NUMBER,                                        
+                                        p_start_win NUMBER,
+                                        p_end_win NUMBER,
+                                        p_trend_win NUMBER);
+
+/*********************************************************
+
+Usecase 5.1 - Forecasting Payroll Cost PER DEPARTMENT - TESTED OK
+Author: Snehotosh Banerjee
+Date: 05/04/2017
+
+ORE Script Name:
+	PAYROLLDEPTTS
+	
+Packages:
+	fpp # Forecasting
+	zoo # Timeseries
+	
+Algorithm:
+	auto.arima
+  forecast
+  stl (Seasonal Decomposition by Loess)
+  
+Output Tables:
+  AA_UC5_FORECAST_DEPT_TBL
+  AA_UC5_FORECAST_DEPT_IMG_TBL
+
+Datastore:
+  dsRF_payroll_store
+*********************************************************/
+  PROCEDURE AA_UC5_DEPT_PRC(p_sql VARCHAR2,
+                                        p_is_seasonal VARCHAR2,
+                                        p_ts_measure_col VARCHAR2,
+                                        p_ts_time_col VARCHAR2,                               
+                                        p_forecast_period NUMBER,                                        
+                                        p_start_win NUMBER,
+                                        p_end_win NUMBER,
+                                        p_trend_win NUMBER,
+                                        p_deptno VARCHAR2,
+                                        p_dname VARCHAR2);
+                                        
+    PROCEDURE AA_UC5_BASEPAY_DEPT_PRC(p_sql VARCHAR2,
+                                        p_is_seasonal VARCHAR2,
+                                        p_ts_measure_col VARCHAR2,
+                                        p_ts_time_col VARCHAR2,                                        
+                                        p_forecast_period NUMBER,                                        
+                                        p_start_win NUMBER,
+                                        p_end_win NUMBER,
+                                        p_trend_win NUMBER,
+                                        p_deptno VARCHAR2,
+                                        p_dname VARCHAR2);                                     
+                                        
+   PROCEDURE AA_UC5_VARPAY_DEPT_PRC(p_sql VARCHAR2,
+                                        p_is_seasonal VARCHAR2,
+                                        p_ts_measure_col VARCHAR2,
+                                        p_ts_time_col VARCHAR2,                                        
+                                        p_forecast_period NUMBER,                                        
+                                        p_start_win NUMBER,
+                                        p_end_win NUMBER,
+                                        p_trend_win NUMBER,
+                                        p_deptno VARCHAR2,
+                                        p_dname VARCHAR2);                                      
+                                        
+/* 
+  Prediction on trained Model
+  Applicable to all classification problems
+*/
+
+PROCEDURE AA_PREDICTION_UC1_PRC(p_test_sql VARCHAR2,p_train_tab_name VARCHAR2,p_ds_name VARCHAR2,p_out_table_name VARCHAR2);
+PROCEDURE AA_PREDICTION_UC2_PRC(p_test_sql VARCHAR2,p_train_tab_name VARCHAR2,p_ds_name VARCHAR2,p_out_table_name VARCHAR2);
+                            
+
+END AA_USECASE_ALGO_LIB_PKG;
+
+create or replace PACKAGE BODY AA_USECASE_ALGO_LIB_PKG AS
+/*
+  Usecase 1 - Attrition
+*/
+            PROCEDURE AA_UC1_TRAIN_PRC(p_sql VARCHAR2,
+                                                         p_is_bal_reqd VARCHAR2,
+                                                         p_perc_os NUMBER,
+                                                         p_perc_us NUMBER,
+                                                         p_trn_ratio NUMBER,
+                                                         p_tgt_class_label VARCHAR2) IS
+                sql_stmt varchar2(6000);
+                sql_img_stmt varchar2(6000);
+                sql_trunc_stmt varchar2(4000);
+                sql_trunc_img_stmt varchar2(4000);
+                v_count1 NUMBER:=0;
+                v_count2 NUMBER:=0;
+                v_tgt_metric_tab VARCHAR2(30):='AA_UC1_MDL_METRICS_TBL';   
+                v_tgt_img_tab VARCHAR2(30):='AA_UC1_MDL_IMG_TBL';
+                ex EXCEPTION;
+            BEGIN
+                    /*
+                      Target table Truncate code
+                    */
+                    sql_trunc_stmt:= 'TRUNCATE TABLE '||v_tgt_metric_tab;
+                    sql_trunc_img_stmt:= 'TRUNCATE TABLE '|| v_tgt_img_tab;
+                    
+                    /*
+                      Checking whether record exists in the target tables
+                    */
+                    select count(*) INTO v_count1 from AA_UC1_MDL_METRICS_TBL;
+                    select count(*) INTO v_count2 from AA_UC1_MDL_IMG_TBL;
+            
+                    /* truncating tables exists */
+                    IF v_count1 > 0 THEN
+                        execute immediate sql_trunc_stmt;
+                    END IF;
+                    
+                    IF v_count2 > 0 THEN
+                        execute immediate sql_trunc_img_stmt;
+                    END IF;
+                    
+                    /* Calling Oracle R Embedded Script for Metric */
+                    sql_stmt:= 'INSERT INTO '||v_tgt_metric_tab||'                                 
+                                SELECT * FROM TABLE(rqTableEval(
+                                cursor('|| p_sql ||'),
+                                cursor(select 1 as "ore.connect",'||p_perc_os||' "perc_over",'||p_perc_us||' "perc_under",20 "kn",
+                                '''||p_is_bal_reqd||''' "isR",'||p_trn_ratio||' "p_spltratio",'''||p_tgt_class_label||''' "prim_class_label",
+                                ''ISCHURN'' "pY" ,''mean'' "p_imputetype",''dsRF_churn_store'' "ds.name" from dual),
+                                ''select CAST(1 as VARCHAR2(20)) METRIC, 1 SCORE from dual'',
+                                ''CLASSRFCHURN''))';
+                    
+                    /* Calling Oracle R Embedded Script for Charts */
+                    sql_img_stmt:= 'INSERT INTO '||v_tgt_img_tab||' 
+                                    SELECT * FROM TABLE(rqTableEval(
+                                    cursor('|| p_sql ||'),
+                                    cursor(select 1 as "ore.connect",'||p_perc_os||' "perc_over",'||p_perc_us||' "perc_under",20 "kn",
+                                    '''||p_is_bal_reqd||''' "isR",'||p_trn_ratio||' "p_spltratio",'''||p_tgt_class_label||''' "prim_class_label",
+                                    ''ISCHURN'' "pY" ,''mean'' "p_imputetype",''dsRF_churn_store'' "ds.name" from dual),
+                                    ''PNG'',
+                                    ''CLASSRFCHURN''))';
+                    
+                    dbms_output.enable(100000);
+                    dbms_output.put_line(sql_stmt);  
+                    
+                    /* Executing the statement for building table */
+                    execute immediate sql_stmt; 
+                    execute immediate sql_img_stmt; 
+                    COMMIT;
+            EXCEPTION
+              when ex then
+                  DBMS_OUTPUT.PUT_LINE('I am in exception');
+              when others then
+                  DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                                 ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                                 ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                                 '''');
+            END;
+
+/*
+  Usecase 2 - Performance
+*/
+
+            PROCEDURE AA_UC2_TRAIN_PRC(p_sql VARCHAR2,
+                                                         p_is_bal_reqd VARCHAR2,
+                                                         p_perc_os NUMBER,
+                                                         p_perc_us NUMBER,
+                                                         p_trn_ratio NUMBER) IS
+                sql_stmt varchar2(6000);
+                --sql_img_stmt varchar2(6000);
+                sql_trunc_stmt varchar2(4000);
+                --sql_trunc_img_stmt varchar2(4000);
+                v_count1 NUMBER:=0;
+                --v_count2 NUMBER:=0;
+                v_tgt_metric_tab VARCHAR2(30):='AA_UC2_MDL_METRICS_TBL';   
+                --v_tgt_img_tab VARCHAR2(30):='AA_UC2_MDL_IMG_TBL';
+                ex EXCEPTION;
+            BEGIN
+                    /*
+                      Target table truncate code
+                    */
+                    sql_trunc_stmt:= 'TRUNCATE TABLE '||v_tgt_metric_tab;
+                    --sql_trunc_img_stmt:= 'TRUNCATE TABLE '||v_tgt_img_tab;
+                    
+                    /*
+                      Checking whether table record exists
+                    */
+                    select count(*) INTO v_count1 from AA_UC2_MDL_METRICS_TBL;
+                    --select count(*) INTO v_count2 from AA_UC2_MDL_IMG_TBL;
+            
+                    /* Truncatinhg tables */
+                    IF v_count1 > 0 THEN
+                        execute immediate sql_trunc_stmt;
+                    END IF;
+                    
+                    --IF v_count2 > 0 THEN
+                    --    execute immediate sql_trunc_img_stmt;
+                    --END IF;
+                    
+                    /* Calling Oracle R Embedded Script for Metric */
+                    sql_stmt:= 'INSERT INTO '||v_tgt_metric_tab||' 
+                                SELECT * FROM TABLE(rqTableEval(
+                                cursor('|| p_sql ||'),
+                                cursor(select 1 as "ore.connect",'||p_perc_os||' "perc_over",'||p_perc_us||' "perc_under",20 "kn",
+                                '''||p_is_bal_reqd||''' "isR",'||p_trn_ratio||' "p_spltratio",
+                                ''PERF_CATEG1'' "pY" ,''mean'' "p_imputetype",''dsRF_perf_store'' "ds.name" from dual),
+                                ''select CAST(1 as VARCHAR2(100)) METRIC,1 SCORE_RATING2, 1 SCORE_RATING3, 1 SCORE_RATING4, 1 SCORE_RATING5 from dual'',
+                                ''CLASSRFPERF''))';
+                    
+                    /* Calling Oracle R Embedded Script for Charts 
+                    sql_img_stmt:= 'INSERT INTO '||v_tgt_img_tab||' 
+                                    SELECT * FROM TABLE(rqTableEval(
+                                    cursor('|| p_sql ||'),
+                                    cursor(select 1 as "ore.connect",'||p_perc_os||' "perc_over",'||p_perc_us||' "perc_under",20 "kn",
+                                    '''||p_is_bal_reqd||''' "isR",'||p_trn_ratio||' "p_spltratio",'''||p_tgt_class_label||''' "prim_class_label",
+                                    ''PERF_CATEG1'' "pY" ,''mean'' "p_imputetype",''dsRF_perf_store'' "ds.name" from dual),
+                                    ''PNG'',
+                                    ''CLASSRFCHURN''))';
+                    */
+                    dbms_output.enable(100000);
+                    dbms_output.put_line(sql_stmt);  
+                    
+                    /* Executing the statement for building table */
+                    execute immediate sql_stmt; 
+                    --execute immediate sql_img_stmt; 
+                    COMMIT;
+            EXCEPTION
+              when ex then
+                  DBMS_OUTPUT.PUT_LINE('I am in exception');
+              when others then
+                  DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                                 ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                                 ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                                 '''');
+            END;
+
+/*
+  Usecase 3 - Profiling (Clustering)
+*/
+
+            PROCEDURE AA_UC3_PRC(p_sql VARCHAR2, p_isDendoReqd VARCHAR2) IS
+                sql_stmt varchar2(6000);
+                sql_trunc_stmt varchar2(4000);
+                sql_trunc_stmt2 varchar2(4000);
+                sql_stmt2 varchar2(4000);
+                v_count NUMBER:=0;
+                v_count2 NUMBER:=0;
+                v_tgt_tab_name VARCHAR2(30):='AA_UC3_PNG_TBL';
+                v_out_tab_name VARCHAR2(30):='AA_UC3_PRED_OUTPUT_TBL';    
+                ex EXCEPTION;
+            BEGIN
+                    /*
+                      Target table drop code
+                    */
+                    sql_trunc_stmt:= 'TRUNCATE TABLE '||v_tgt_tab_name;
+                    
+                    /* Truncating cluster assignment Table */
+                    sql_trunc_stmt2:= 'TRUNCATE TABLE '||v_out_tab_name;
+                    
+                    /*
+                      Checking whether table exists
+                    */
+                    select count(*) INTO v_count from AA_UC3_PNG_TBL;    
+                    select count(*) INTO v_count from AA_UC3_PRED_OUTPUT_TBL;   
+            
+                    /*
+                      If the table exists then drop the table else create the table
+                    */        
+                    IF v_count > 0 THEN
+                        execute immediate sql_trunc_stmt;
+                    END IF;     
+
+                    IF v_count2 > 0 THEN
+                        execute immediate sql_trunc_stmt2;
+                    END IF;                     
+                        
+                    sql_stmt:='INSERT INTO '||v_tgt_tab_name||' 
+                               select * from table(rqTableEval(
+                               cursor('|| p_sql ||'),                    
+                               cursor(select 1 as "ore.connect",'''|| p_isDendoReqd ||''' as "isDendo",''ds_cluster_store'' "ds.name" from dual),
+                               ''PNG'',
+                               ''CLUSTPROFILE''))';
+                               
+                    sql_stmt2:='INSERT INTO '||v_out_tab_name||' 
+                                    SELECT * FROM TABLE(rqTableEval(
+                                    cursor('|| p_sql ||'),
+                                    cursor(select 1 as "ore.connect",''ds_cluster_store'' "ds.name" from dual),
+                                    ''select CAST(1 as VARCHAR2(20)) EMPID, CAST(1 as VARCHAR2(20)) CLUSTER_NUM from dual'',
+                                    ''CLUSTPROFILE''))';
+                                   
+                    --dbms_output.enable(100000);
+                    --dbms_output.put_line(sql_stmt);
+                    execute immediate sql_stmt;
+                    COMMIT;
+                    
+                    execute immediate sql_stmt2;
+                    COMMIT;
+            EXCEPTION
+              when ex then
+                  DBMS_OUTPUT.PUT_LINE('I am in exception');
+              when others then
+                  DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                                 ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                                 ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                                 '''');
+            END;     
+
+/*
+  Usecase 5 - Payroll Cost Forecasting
+*/
+            
+            PROCEDURE AA_UC5_PRC(p_sql VARCHAR2,
+                                        p_is_seasonal VARCHAR2,
+                                        p_ts_measure_col VARCHAR2,
+                                        p_ts_time_col VARCHAR2,                                        
+                                        p_forecast_period NUMBER,                                        
+                                        p_start_win NUMBER,
+                                        p_end_win NUMBER,
+                                        p_trend_win NUMBER) IS
+                      sql_stmt varchar2(6000);
+                      sql_img_stmt varchar2(6000);
+                      sql_trunc_stmt varchar2(4000);
+                      sql_trunc_img_stmt varchar2(4000);
+                      v_count NUMBER:=0;
+                      v_img_count NUMBER:=0;
+                      v_tab_name VARCHAR2(30):='AA_UC5_FORECAST_TBL';   
+                      v_tab_img_name VARCHAR2(30):='AA_UC5_FORECAST_IMG_TBL';   
+                      ex EXCEPTION;
+                  BEGIN
+                          /*
+                            Target table drop code
+                          */
+                          sql_trunc_stmt:= 'TRUNCATE TABLE '||v_tab_name;
+                          sql_trunc_img_stmt:= 'TRUNCATE TABLE '||v_tab_img_name;
+
+                          /*
+                            Checking whether table exists
+                          */
+                          select count(*) INTO v_count from AA_UC5_FORECAST_TBL;
+                          select count(*) INTO v_img_count from AA_UC5_FORECAST_IMG_TBL;
+
+                          /* Checking whether table exists */
+                          IF v_count > 0 THEN
+                              execute immediate sql_trunc_stmt;
+                          END IF;      
+
+                          IF v_img_count > 0 THEN
+                              execute immediate sql_trunc_img_stmt;
+                          END IF;   
+
+                          /* Calling Oracle R Embedded Script for Metric */
+                          sql_stmt:= 'INSERT INTO '||v_tab_name||' 
+                                      SELECT to_date(FORECAST_PERIOD,''Mon YYYY'') as FORECAST_PERIOD,
+                                      FORECAST,
+                                      LO_80,
+                                      HI_80,
+                                      LO_95,
+                                      HI_95
+                                      FROM TABLE(rqTableEval(
+                                      cursor('|| p_sql ||'),
+                                      cursor(select 1 as "ore.connect",'''||p_is_seasonal||''' "is.seasonal",
+                                      '''||p_ts_measure_col||''' "ts.measure.col",'''||p_ts_time_col||''' "ts.time.col",
+                                      '||p_forecast_period||' "forecast.period", 
+                                      '||p_start_win||' "start.yr",'||p_end_win||' "end.yr",'||p_trend_win||' "trend.win",
+                                      ''dsRF_payroll_store'' "ds.name" from dual),
+                                      ''select cast(1 as varchar2(10)) FORECAST_PERIOD,1 FORECAST, 1 LO_80, 1 HI_80, 1 LO_95, 1 HI_95 from dual'',
+                                      ''PAYROLLTS''))';
+
+                          /* Calling Oracle R Embedded Script for Charts */
+                          sql_img_stmt:= 'INSERT INTO '||v_tab_img_name||' 
+                                          SELECT * FROM TABLE(rqTableEval(
+                                          cursor('|| p_sql ||'),
+                                          cursor(select 1 as "ore.connect",'''||p_is_seasonal||''' "is.seasonal",
+                                          '''||p_ts_measure_col||''' "ts.measure.col",'''||p_ts_time_col||''' "ts.time.col",
+                                          '||p_forecast_period||' "forecast.period", 
+                                          '||p_start_win||' "start.yr",'||p_end_win||' "end.yr",'||p_trend_win||' "trend.win",
+                                          ''dsRF_payroll_store'' "ds.name" from dual),
+                                          ''PNG'',
+                                          ''PAYROLLTS''))';                    
+
+                          /* Executing the statement for building table */
+                          execute immediate sql_stmt; 
+                          execute immediate sql_img_stmt; 
+                          COMMIT;
+                  EXCEPTION
+                    when ex then
+                        DBMS_OUTPUT.PUT_LINE('I am in exception');
+                    when others then
+                        DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                                       ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                                       ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                                       '''');
+                  END;  
+                  
+/*
+  Usecase 5.1 - Payroll Cost Department wise Forecasting
+*/
+            
+            PROCEDURE AA_UC5_DEPT_PRC(p_sql VARCHAR2,
+                                        p_is_seasonal VARCHAR2,
+                                        p_ts_measure_col VARCHAR2,
+                                        p_ts_time_col VARCHAR2,                                        
+                                        p_forecast_period NUMBER,                                        
+                                        p_start_win NUMBER,
+                                        p_end_win NUMBER,
+                                        p_trend_win NUMBER,
+                                        p_deptno VARCHAR2,
+                                        p_dname VARCHAR2) IS
+                      sql_stmt varchar2(4000); 
+                      sql_img_stmt varchar2(4000);
+                      v_tab_name VARCHAR2(30):='AA_UC5_FORECAST_DEPT_TBL';  
+                      v_tab_img_name VARCHAR2(30):='AA_UC5_FORECAST_DEPT_IMG_TBL';
+                      ex EXCEPTION;
+            BEGIN 
+
+                          /* Calling Oracle R Embedded Script for Metric */
+                          sql_stmt:= 'INSERT INTO '||v_tab_name||' 
+                                      SELECT '''||p_deptno||''' as DEPTNO,'''||p_dname||''' DNAME, 
+                                      to_date(FORECAST_PERIOD,''Mon YYYY'') as FORECAST_PERIOD,
+                                      FORECAST,
+                                      LO_80,
+                                      HI_80,
+                                      LO_95,
+                                      HI_95
+                                      FROM TABLE(rqTableEval(
+                                      cursor('|| p_sql ||'),
+                                      cursor(select 1 as "ore.connect",'''||p_is_seasonal||''' "is.seasonal",
+                                      '''||p_ts_measure_col||''' "ts.measure.col",'''||p_ts_time_col||''' "ts.time.col",
+                                      '||p_forecast_period||' "forecast.period", 
+                                      '||p_start_win||' "start.yr",'||p_end_win||' "end.yr",'||p_trend_win||' "trend.win",                                      
+                                      ''dsRF_payroll_dept_store'' "ds.name" from dual),
+                                      ''select cast(1 as varchar2(10)) FORECAST_PERIOD,1 FORECAST, 1 LO_80, 1 HI_80, 1 LO_95, 1 HI_95 from dual'',
+                                      ''PAYROLLTS''))';                
+
+                          /* Calling Oracle R Embedded Script for Metric */
+                          sql_img_stmt:= 'INSERT INTO '||v_tab_img_name||' 
+                                      SELECT '''||p_deptno||''' as DEPTNO,'''||p_dname||''' DNAME, 
+                                      NAME,ID,IMAGE
+                                      FROM TABLE(rqTableEval(
+                                      cursor('|| p_sql ||'),
+                                      cursor(select 1 as "ore.connect",'''||p_is_seasonal||''' "is.seasonal",
+                                      '''||p_ts_measure_col||''' "ts.measure.col",'''||p_ts_time_col||''' "ts.time.col",
+                                      '||p_forecast_period||' "forecast.period", 
+                                      '||p_start_win||' "start.yr",'||p_end_win||' "end.yr",'||p_trend_win||' "trend.win",                                      
+                                      ''dsRF_payroll_dept_store'' "ds.name" from dual),
+                                      ''PNG'',
+                                      ''PAYROLLTS''))'; 
+                          /* Executing the statement for building table */
+                          execute immediate sql_stmt;                           
+                          COMMIT;
+                          
+                          execute immediate sql_img_stmt; 
+                          COMMIT;
+              EXCEPTION
+                    when ex then
+                        DBMS_OUTPUT.PUT_LINE('I am in exception');
+                    when others then
+                        DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                                       ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                                       ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                                       '''');
+              END; 
+
+/*
+  Usecase 5.2 - Payroll Cost BasePay Forecasting
+*/
+            
+            PROCEDURE AA_UC5_BASEPAY_DEPT_PRC(p_sql VARCHAR2,
+                                        p_is_seasonal VARCHAR2,
+                                        p_ts_measure_col VARCHAR2,
+                                        p_ts_time_col VARCHAR2,                                        
+                                        p_forecast_period NUMBER,                                        
+                                        p_start_win NUMBER,
+                                        p_end_win NUMBER,
+                                        p_trend_win NUMBER,
+                                        p_deptno VARCHAR2,
+                                        p_dname VARCHAR2) IS
+                      sql_stmt varchar2(4000); 
+                      sql_img_stmt varchar2(4000);
+                      v_tab_name VARCHAR2(30):='AA_UC5_FC_BPAY_DEPT_TBL';  
+                      v_tab_img_name VARCHAR2(30):='AA_UC5_FC_BPAY_DEPT_IMG_TBL';
+                      ex EXCEPTION;
+            BEGIN 
+
+                          /* Calling Oracle R Embedded Script for Metric */
+                          sql_stmt:= 'INSERT INTO '||v_tab_name||' 
+                                      SELECT '''||p_deptno||''' as DEPTNO,'''||p_dname||''' DNAME, 
+                                      to_date(FORECAST_PERIOD,''Mon YYYY'') as FORECAST_PERIOD,
+                                      FORECAST,
+                                      LO_80,
+                                      HI_80,
+                                      LO_95,
+                                      HI_95
+                                      FROM TABLE(rqTableEval(
+                                      cursor('|| p_sql ||'),
+                                      cursor(select 1 as "ore.connect",'''||p_is_seasonal||''' "is.seasonal",
+                                      '''||p_ts_measure_col||''' "ts.measure.col",'''||p_ts_time_col||''' "ts.time.col",
+                                      '||p_forecast_period||' "forecast.period", 
+                                      '||p_start_win||' "start.yr",'||p_end_win||' "end.yr",'||p_trend_win||' "trend.win",                                      
+                                      ''dsRF_payroll_bp_dept_store'' "ds.name" from dual),
+                                      ''select cast(1 as varchar2(10)) FORECAST_PERIOD,1 FORECAST, 1 LO_80, 1 HI_80, 1 LO_95, 1 HI_95 from dual'',
+                                      ''PAYROLLTS''))';                
+
+                          /* Calling Oracle R Embedded Script for Metric */
+                          sql_img_stmt:= 'INSERT INTO '||v_tab_img_name||' 
+                                      SELECT '''||p_deptno||''' as DEPTNO,'''||p_dname||''' DNAME, 
+                                      NAME,ID,IMAGE
+                                      FROM TABLE(rqTableEval(
+                                      cursor('|| p_sql ||'),
+                                      cursor(select 1 as "ore.connect",'''||p_is_seasonal||''' "is.seasonal",
+                                      '''||p_ts_measure_col||''' "ts.measure.col",'''||p_ts_time_col||''' "ts.time.col",
+                                      '||p_forecast_period||' "forecast.period", 
+                                      '||p_start_win||' "start.yr",'||p_end_win||' "end.yr",'||p_trend_win||' "trend.win",                                      
+                                      ''dsRF_payroll_bp_dept_store'' "ds.name" from dual),
+                                      ''PNG'',
+                                      ''PAYROLLTS''))'; 
+                          /* Executing the statement for building table */
+                          execute immediate sql_stmt;                           
+                          COMMIT;
+                          
+                          execute immediate sql_img_stmt; 
+                          COMMIT;
+              EXCEPTION
+                    when ex then
+                        DBMS_OUTPUT.PUT_LINE('I am in exception');
+                    when others then
+                        DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                                       ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                                       ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                                       '''');
+              END; 
+
+/*
+  Usecase 5.3 - Payroll Cost Variable Pay Forecasting
+*/
+            
+            PROCEDURE AA_UC5_VARPAY_DEPT_PRC(p_sql VARCHAR2,
+                                        p_is_seasonal VARCHAR2,
+                                        p_ts_measure_col VARCHAR2,
+                                        p_ts_time_col VARCHAR2,                                        
+                                        p_forecast_period NUMBER,                                        
+                                        p_start_win NUMBER,
+                                        p_end_win NUMBER,
+                                        p_trend_win NUMBER,
+                                        p_deptno VARCHAR2,
+                                        p_dname VARCHAR2) IS
+                      sql_stmt varchar2(4000); 
+                      sql_img_stmt varchar2(4000);
+                      v_tab_name VARCHAR2(30):='AA_UC5_FC_VARPAY_DEPT_TBL';  
+                      v_tab_img_name VARCHAR2(30):='AA_UC5_FC_VARPAY_DEPT_IMG_TBL';
+                      ex EXCEPTION;
+            BEGIN 
+
+                          /* Calling Oracle R Embedded Script for Metric */
+                          sql_stmt:= 'INSERT INTO '||v_tab_name||' 
+                                      SELECT '''||p_deptno||''' as DEPTNO,'''||p_dname||''' DNAME, 
+                                      to_date(FORECAST_PERIOD,''Mon YYYY'') as FORECAST_PERIOD,
+                                      FORECAST,
+                                      LO_80,
+                                      HI_80,
+                                      LO_95,
+                                      HI_95
+                                      FROM TABLE(rqTableEval(
+                                      cursor('|| p_sql ||'),
+                                      cursor(select 1 as "ore.connect",'''||p_is_seasonal||''' "is.seasonal",
+                                      '''||p_ts_measure_col||''' "ts.measure.col",'''||p_ts_time_col||''' "ts.time.col",
+                                      '||p_forecast_period||' "forecast.period", 
+                                      '||p_start_win||' "start.yr",'||p_end_win||' "end.yr",'||p_trend_win||' "trend.win",                                      
+                                      ''dsRF_payroll_vp_dept_store'' "ds.name" from dual),
+                                      ''select cast(1 as varchar2(10)) FORECAST_PERIOD,1 FORECAST, 1 LO_80, 1 HI_80, 1 LO_95, 1 HI_95 from dual'',
+                                      ''PAYROLLTS''))';                
+
+                          /* Calling Oracle R Embedded Script for Metric */
+                          sql_img_stmt:= 'INSERT INTO '||v_tab_img_name||' 
+                                      SELECT '''||p_deptno||''' as DEPTNO,'''||p_dname||''' DNAME, 
+                                      NAME,ID,IMAGE
+                                      FROM TABLE(rqTableEval(
+                                      cursor('|| p_sql ||'),
+                                      cursor(select 1 as "ore.connect",'''||p_is_seasonal||''' "is.seasonal",
+                                      '''||p_ts_measure_col||''' "ts.measure.col",'''||p_ts_time_col||''' "ts.time.col",
+                                      '||p_forecast_period||' "forecast.period", 
+                                      '||p_start_win||' "start.yr",'||p_end_win||' "end.yr",'||p_trend_win||' "trend.win",                                      
+                                      ''dsRF_payroll_vp_dept_store'' "ds.name" from dual),
+                                      ''PNG'',
+                                      ''PAYROLLTS''))'; 
+                          /* Executing the statement for building table */
+                          execute immediate sql_stmt;                           
+                          COMMIT;
+                          
+                          execute immediate sql_img_stmt; 
+                          COMMIT;
+              EXCEPTION
+                    when ex then
+                        DBMS_OUTPUT.PUT_LINE('I am in exception');
+                    when others then
+                        DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                                       ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                                       ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                                       '''');
+              END;              
+              
+  /*
+    Prediction
+  */
+  
+  PROCEDURE AA_PREDICTION_UC1_PRC(p_test_sql VARCHAR2,p_train_tab_name VARCHAR2,p_ds_name VARCHAR2,p_out_table_name VARCHAR2)
+  IS
+                      sql_stmt varchar2(6000);
+                      sql_trunc_stmt varchar2(4000);
+                      v_count NUMBER:=0;
+                      ex EXCEPTION;
+                  BEGIN
+                          /*
+                            Target prediction table drop code
+                          */
+                          sql_trunc_stmt:= 'TRUNCATE TABLE '||p_out_table_name;  
+
+                          /* Checking whether table exists */                          
+                          execute immediate sql_trunc_stmt;      
+
+                          /* Calling Oracle R Embedded Script for Metric */
+                          sql_stmt:= 'INSERT INTO '||p_out_table_name||' 
+                                      SELECT ID AS EMPID,PROBA_Y,PROBA_N,IND as CHURN_IND_50,
+                                      CASE WHEN PROBA_Y >= 0.60 AND PROBA_Y < 0.70 THEN ''Y'' ELSE ''N'' END AS CHURN_IND_50_70,
+                                      CASE WHEN PROBA_Y >= 0.70 AND PROBA_Y < 0.90 THEN ''Y'' ELSE ''N'' END AS CHURN_IND_70_90,
+                                      CASE WHEN PROBA_Y >= 0.90 THEN ''Y'' ELSE ''N'' END AS CHURN_IND_90_100
+                                      FROM
+                                      table(rqTableEval(
+                                                cursor('|| p_test_sql ||'),
+                                                cursor(select '''|| p_ds_name ||''' "datastore_name",'''|| p_train_tab_name ||''' "srcdat",1 "ore.connect" from dual),
+                                                ''select CAST(1 as VARCHAR2(20)) ID, 1 PROBA_Y, 1 PROBA_N, CAST(1 as VARCHAR2(2)) IND from dual'',
+                                                ''MODELRFPRED''))';                  
+
+                          DBMS_OUTPUT.PUT_LINE(sql_stmt);
+                          /* Executing the statement for building table */
+                          execute immediate sql_stmt; 
+                          COMMIT;
+
+                  EXCEPTION
+                    when ex then
+                        DBMS_OUTPUT.PUT_LINE('I am in exception');
+                    when others then
+                        DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                                       ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                                       ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                                       '''');
+                  END;  
+                  
+  PROCEDURE AA_PREDICTION_UC2_PRC(p_test_sql VARCHAR2,p_train_tab_name VARCHAR2,p_ds_name VARCHAR2,p_out_table_name VARCHAR2)
+  IS
+                      sql_stmt varchar2(6000);
+                      sql_trunc_stmt varchar2(4000);
+                      v_count NUMBER:=0;
+                      ex EXCEPTION;
+                  BEGIN
+                          /*
+                            Target prediction table drop code
+                          */
+                          sql_trunc_stmt:= 'TRUNCATE TABLE '||p_out_table_name;  
+
+                          /* Checking whether table exists */                          
+                          execute immediate sql_trunc_stmt;      
+
+                          /* Calling Oracle R Embedded Script for Metric */
+                          sql_stmt:= 'INSERT INTO '||p_out_table_name||' 
+                                      select EMPID,PERF_2_PROB,PERF_3_PROB,PERF_4_PROB,PERF_5_PROB,PERF_PREDICTION
+                                      FROM
+                                      table(rqTableEval(
+                                                cursor('|| p_test_sql ||'),
+                                                cursor(select '''|| p_ds_name ||''' "datastore_name",'''|| p_train_tab_name ||''' "srcdat",1 "ore.connect" from dual),
+                                                ''select CAST(1 as VARCHAR2(20)) EMPID,1 PERF_2_PROB, 1 PERF_3_PROB, 1 PERF_4_PROB,1 PERF_5_PROB, CAST(1 as VARCHAR2(20)) PERF_PREDICTION from dual'',
+                                                ''MODELPERFPRED''))';                  
+
+                          DBMS_OUTPUT.PUT_LINE(sql_stmt);
+                          /* Executing the statement for building table */
+                          execute immediate sql_stmt; 
+                          COMMIT;
+
+                  EXCEPTION
+                    when ex then
+                        DBMS_OUTPUT.PUT_LINE('I am in exception');
+                    when others then
+                        DBMS_OUTPUT.PUT_LINE('SQLCODE=' || to_char(SQLCODE) ||
+                                       ' Error=''' || DBMS_UTILITY.FORMAT_ERROR_STACK ||
+                                       ''' Backtrace=''' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE ||
+                                       '''');
+                  END;
+END;
