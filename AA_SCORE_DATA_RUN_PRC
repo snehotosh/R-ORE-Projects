@@ -1,0 +1,81 @@
+create or replace PROCEDURE AA_SCORE_DATA_RUN_PRC
+( PARAM_CURR_YEAR NUMBER,  
+  PARAM_CURR_MONTH NUMBER,
+  out_status_final OUT NUMBER
+) 
+IS
+   v_master_status NUMBER:= -999;
+   v_compa_status NUMBER:= -999; 
+   v_dept_chng_status NUMBER:= -999;
+   v_perf_status NUMBER:= -999; 
+   v_promo_status NUMBER:= -999; 
+   v_sal_rev_status NUMBER:= -999;
+   v_sick_lv_status NUMBER:= -999;
+   v_spvr_chng_status NUMBER:= -999;  
+   v_up_lv_status NUMBER:=-999;
+   v_ua_lv_status NUMBER:=-999;
+   v_score_tab_status NUMBER:= -999; 
+   ex EXCEPTION;
+ BEGIN
+    AA_SCORE_DATA_PREP_PKG.AA_EMP_MASTER_SCO_PRC
+    (p_curr_mon => PARAM_CURR_MONTH,
+     p_curr_yr => PARAM_CURR_YEAR,
+     out_status => v_master_status);         
+    DBMS_OUTPUT.PUT_LINE('1.The output status:'||v_master_status);
+
+    AA_SCORE_DATA_PREP_PKG.AA_EMP_COMPA_SCO_PRC(p_curr_yr => PARAM_CURR_YEAR,out_status => v_compa_status);
+    DBMS_OUTPUT.PUT_LINE('2.The output status:'||v_compa_status);
+
+    AA_SCORE_DATA_PREP_PKG.AA_EMP_DEPT_SCO_PRC(p_curr_yr => PARAM_CURR_YEAR,out_status => v_dept_chng_status);
+    DBMS_OUTPUT.PUT_LINE('3.The output status:'||v_dept_chng_status);
+
+    AA_SCORE_DATA_PREP_PKG.AA_EMP_PERF_SCO_PRC(p_curr_yr => PARAM_CURR_YEAR,out_status => v_perf_status);
+    DBMS_OUTPUT.PUT_LINE('4.The output status:'||v_perf_status);
+
+    AA_SCORE_DATA_PREP_PKG.AA_EMP_PROMO_SCO_PRC(p_curr_yr => PARAM_CURR_YEAR,out_status => v_promo_status);
+    DBMS_OUTPUT.PUT_LINE('5.The output status:'||v_promo_status);
+ 
+    AA_SCORE_DATA_PREP_PKG.AA_EMP_SALREV_SCO_PRC(p_curr_yr => PARAM_CURR_YEAR,out_status => v_sal_rev_status);
+    DBMS_OUTPUT.PUT_LINE('6.The output status:'||v_sal_rev_status);
+ 
+    AA_SCORE_DATA_PREP_PKG.AA_EMP_SICK_LV_SCO_PRC(p_curr_yr => PARAM_CURR_YEAR,out_status => v_sick_lv_status);
+    DBMS_OUTPUT.PUT_LINE('7.The output status:'||v_sick_lv_status);
+    
+    AA_SCORE_DATA_PREP_PKG.AA_EMP_UNPAID_LV_SCO_PRC(p_curr_yr => PARAM_CURR_YEAR,out_status => v_up_lv_status);
+    DBMS_OUTPUT.PUT_LINE('8.The output status:'||v_up_lv_status);
+    
+    AA_SCORE_DATA_PREP_PKG.AA_EMP_UNAUTH_LV_SCO_PRC(p_curr_yr => PARAM_CURR_YEAR,out_status => v_ua_lv_status);
+    DBMS_OUTPUT.PUT_LINE('9.The output status:'||v_ua_lv_status);
+    
+    AA_SCORE_DATA_PREP_PKG.AA_EMP_SPVR_SCO_PRC(p_curr_yr => PARAM_CURR_YEAR,out_status => v_spvr_chng_status);  
+    DBMS_OUTPUT.PUT_LINE('10.The output status:'||v_spvr_chng_status);
+
+   /*************************************************************************  
+                          Main Training Table 
+    **************************************************************************/
+    IF 	v_master_status = 1         AND
+        v_compa_status = 1          AND
+        v_dept_chng_status = 1      AND
+        v_perf_status = 1           AND
+        v_promo_status = 1          AND
+        v_sal_rev_status = 1        AND
+        v_sick_lv_status = 1        AND
+        v_up_lv_status = 1          AND
+        v_ua_lv_status = 1          AND
+        v_spvr_chng_status = 1   
+    THEN          
+        AA_SCORE_DATA_PREP_PKG.AA_COMMN_MDL_SCO_PRC(out_status => v_score_tab_status);         
+        DBMS_OUTPUT.PUT_LINE('11.The output status:'||v_score_tab_status);          
+        DBMS_OUTPUT.PUT_LINE('Successfully Executed!');
+        out_status_final:= 1;
+    ELSE
+      RAISE ex;
+    END IF;
+  EXCEPTION
+    WHEN ex THEN
+      DBMS_OUTPUT.PUT_LINE('Something went wrong.Please check!');
+      out_status_final:= 0;
+    WHEN OTHERS THEN
+      DBMS_OUTPUT.PUT_LINE('Something went wrong.Please check!');
+      out_status_final:= 0;  
+  END;
