@@ -1,0 +1,286 @@
+setwd('D:/R/rworkspace/textanalytics')
+
+###########################################################################################
+# Referenced Blogs
+###########################################################################################
+# https://rpubs.com/brianzive/textmining
+# source("https://bioconductor.org/biocLite.R") to install old packages
+# https://programminghistorian.org/lessons/basic-text-processing-in-r
+# https://www.growthaccelerationpartners.com/blog/written-word-machine-learning-nlp/
+# http://www.martinschweinberger.de/blog/pos-tagging-with-r/
+# https://rstudio-pubs-static.s3.amazonaws.com/265713_cbef910aee7642dc8b62996e38d2825d.html
+# https://rpubs.com/williamsurles/316682
+# https://github.com/chenmiao/Big_Data_Analytics_Web_Text/wiki/Text-Preprocessing-with-R
+# http://www.martinschweinberger.de/blog/tutorials/
+# http://textblob.readthedocs.io/en/dev/advanced_usage.html#pos-taggers
+# https://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
+##########################################################################################
+
+# Importing libraries
+library(tm)
+library(readxl)
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+library(qdap)
+library(RWeka)
+library(slam)
+library(cluster)   
+library(proxy)
+library(NbClust)
+library(NLP)
+library(openNLP)
+
+# https://cran.r-project.org/src/contrib/Archive/slam/slam_0.1-37.tar.gzy
+# https://datacube.wu.ac.at/src/contrib/
+
+extractPOS <- function(x, thisPOSregex='NN') {
+  x <- as.String(x)
+  wordAnnotation <- annotate(x, list(Maxent_Sent_Token_Annotator(), Maxent_Word_Token_Annotator()))
+  POSAnnotation <- annotate(x, Maxent_POS_Tag_Annotator(), wordAnnotation)
+  POSwords <- subset(POSAnnotation, type == "word")
+  tags <- sapply(POSwords$features, '[[', "POS")
+  thisPOSindex <- grep(thisPOSregex, tags)
+  tokenizedAndTagged <- sprintf("%s/%s", x[POSwords][thisPOSindex], tags[thisPOSindex])
+  untokenizedAndTagged <- paste(tokenizedAndTagged, collapse = " ")
+  untokenizedAndTagged
+}
+
+###############################################################
+### --- write a function which syntactically parses text in corpus files
+###############################################################
+# write function
+paRsing <- function(path){
+  require("NLP")
+  require("openNLP")
+  require("openNLPmodels.en")
+  require("stringr")
+  corpus.files = list.files(path = path, pattern = NULL, all.files = T,
+                            full.names = T, recursive = T, ignore.case = T, include.dirs = T)
+  corpus.tmp <- lapply(corpus.files, function(x) {
+    scan(x, what = "char", sep = "\t", quiet = T) }  )
+  corpus.tmp <- lapply(corpus.tmp, function(x){
+    x <- paste(x, collapse = " ")  }  )
+  corpus.tmp <- lapply(corpus.tmp, function(x) {
+    x <- enc2utf8(x)  }  )
+  corpus.tmp <- gsub(" {2,}", " ", corpus.tmp)
+  corpus.tmp <- str_trim(corpus.tmp, side = "both")
+  sent_token_annotator <- Maxent_Sent_Token_Annotator()
+  word_token_annotator <- Maxent_Word_Token_Annotator()
+  parse_annotator <- Parse_Annotator()
+  Corpus <- lapply(corpus.tmp, function(x){
+    x <- as.String(x)  }  )
+  lapply(Corpus, function(x){
+    annotated <- annotate(x, list(sent_token_annotator, word_token_annotator))
+    # Compute the parse annotations only.
+    parsed <- parse_annotator(x, annotated)
+    # Extract the formatted parse trees.
+    parsedtexts <- sapply(parsed$features, '[[', "parse")
+    # Read into NLP Tree objects.
+    parsetrees <- lapply(parsedtexts, Tree_parse)
+    gc()
+    return(list(parsedtexts, parsetrees)) 
+  }  )
+}
+
+data <- data.frame(read_excel('ConsolidatedData_Final.xlsx',col_names = T))
+
+str(data)
+head(data)
+names(data)
+
+# Issues
+issues_df <- data[,'Issue']
+
+# Gap
+gap_df <- data[,'Gap']
+
+# Action
+action_df <- data[,'Actions']
+
+# Load the data as a corpus
+corpus_docs <- Corpus(VectorSource(action_df),readerControl=list(language="english"))
+corpus_copy <- corpus_docs
+
+#Inspect the content of the document
+#inspect(issues_docs)
+
+# Text transformation
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+
+corpus_docs <- tm_map(corpus_docs, toSpace, "\r?\n|\r")
+corpus_docs <- tm_map(corpus_docs, toSpace, "[^A-Za-z0-9\\s]")
+corpus_docs <- tm_map(corpus_docs, toSpace, "[^[:graph:]]")
+
+print(corpus_docs[[1]][1])
+
+# convert utf8 encodings to byte
+#corpus_docs <- tm_map(corpus_docs, function(x) iconv(enc2utf8(x), sub = "byte"))
+
+# Remove text within brackets
+corpus_docs <- tm_map(corpus_docs, content_transformer(qdap::bracketX))
+
+# Replace numbers with words
+corpus_docs <- tm_map(corpus_docs, content_transformer(qdap::replace_number))
+
+# Replace abbreviations
+corpus_docs <- tm_map(corpus_docs, content_transformer(qdap::replace_abbreviation))
+
+# Replace contractions
+corpus_docs <- tm_map(corpus_docs, content_transformer(qdap::replace_contraction))
+corpus_docs[[1]][1]
+
+# Replace symbols with words
+corpus_docs <- tm_map(corpus_docs, content_transformer(qdap::replace_symbol))
+
+# Convert the text to lower case
+corpus_docs <- tm_map(corpus_docs, content_transformer(tolower))
+
+# Remove numbers
+corpus_docs <- tm_map(corpus_docs, removeNumbers)
+corpus_docs[[1]][1]
+
+# Remove punctuations
+corpus_docs <- tm_map(corpus_docs, removePunctuation,preserve_intra_word_dashes = TRUE)
+
+# Remove your own stop word
+# specify your stopwords as a character vector
+#corpus_docs <- tm_map(corpus_docs, removeWords, c("cloud", "oracle","tcm","architecture",'customer',
+#                                                  'se migrations to cloud','cloud marketing','czech localizations','migrations and integrations','Customizations','Customer education','iaas','new features and technics','Cloud solutions','customizations','environments within iaas','Sharing skills','SaaS implementation','SaaS solutions',' Cloud Applications knowledge','Technical Solution Sets','OTM cloud tuning ','FTI Solution Sets','IaaS Roadshow','Cloud Innovation groups','Cloud in GR Public Sector ','OD Lead Generation ','Capacity','CAS/TCM','Project learnings','Resourcing','ssi')) 
+corpus_docs <- tm_map(corpus_docs, removeWords, c("cloud", "oracle","tcm",'iaas','ssi','customer'))
+
+# Remove english common stopwords
+corpus_docs <- tm_map(corpus_docs, removeWords, stopwords("english"))
+
+# Eliminate extra white spaces
+corpus_docs <- tm_map(corpus_docs, stripWhitespace)
+corpus_docs <- tm_map(corpus_docs, trimws)
+
+# Text stemming
+corpus_docs <- tm_map(corpus_docs, stemDocument)
+
+print(corpus_docs[[1]][1])
+
+#corpus_docs <- stemCompletion(x = corpus_docs,dictionary = corpus_copy)
+
+BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+TrigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
+FourgramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4))
+
+# Build a term-document matrix
+dtm <-DocumentTermMatrix(corpus_docs,control = list(weighting = function(x) weightTfIdf(x, normalize = TRUE)))
+bigram.dtm <-DocumentTermMatrix(corpus_docs,control = list(tokenize = BigramTokenizer))
+trigram.dtm <-DocumentTermMatrix(corpus_docs,control = list(tokenize = TrigramTokenizer))
+fourgram.dtm <-DocumentTermMatrix(corpus_docs,control = list(tokenize = FourgramTokenizer))
+
+# Inspect
+#inspect(bigram.dtm)
+?inspect
+#View(as.matrix(dtm))
+
+#--------------------Testing ----------------------------------------------------
+# To get the word dist, we use the slam package for ops with simple triplet mat
+sums.3g <- colapply_simple_triplet_matrix(trigram.dtm,FUN=sum)
+head(sums.3g)
+sums.3g <- sort(sums.3g, decreasing=T)
+head(sums.3g)
+
+options(java.parameters = "-Xms4096m")
+---------------------------------------------------------------
+  
+# Tagging POS
+#corpus_docs_POS <- list()
+#for(i in 1:length(corpus_docs)){
+#  #print(i)
+#  corpus_docs_POS[i] <- extractPOS(corpus_docs[[i]]$content,'NN|JJ')
+#}
+
+gc(reset = TRUE)
+
+#------------------ End of Testing -----------------------------------
+
+m <- as.matrix(dtm)
+v <- sort(colSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+head(d, 20)
+
+# Plot tag cloud
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+          max.words=50, random.order=FALSE,
+          colors=brewer.pal(8, "Dark2"))
+
+
+# Plot word frequencies
+barplot(d[1:20,]$freq, las = 2, names.arg = d[1:20,]$word,
+        col ="lightblue", main ="Most Frequent words",
+        ylab = "Word frequencies")
+
+#the dissimilarity is between documents
+#dis <- proxy::(dtm, method="cosine")
+
+#visualize the dissimilarity results to matrix, here we are just printing part of the big matrix
+#as.matrix(dis)[1:10, 1:10]
+#visualize the dissimilarity results as a heatmap
+#heatmap(as.matrix(dis)[1:50, 1:50])
+
+# https://rstudio-pubs-static.s3.amazonaws.com/265713_cbef910aee7642dc8b62996e38d2825d.html
+# Clustering by Term Similarity
+dtmss <- removeSparseTerms(dtm, 0.94) # element that doesn't appear in atleast 6% of the entries (or documents).
+#class(dtmss)
+dtmss
+
+# COnverting DTM Similarity into matrix
+dtmss_mat <- as.matrix(dtmss)
+
+## Hierarchal Clustering
+# First calculate distance between words & then cluster them according to similarity.
+
+#d <- stats::dist(t(dtmss), method="euclidian")  
+d <- proxy::dist(t(dtmss_mat), method="cosine") 
+fit <- hclust(d=d, method="ward.D2")
+fit  
+
+set.seed(123)
+nb <- NbClust(data = dtmss_mat,method = 'complete')
+?NbClust
+
+nb$Best.nc
+ls(nb)
+
+par(mfrow=c(1,1))
+
+# Plotting the dendogram
+plot.new()
+plot(fit, hang=-1)
+groups <- cutree(fit, k=6)   # "k=" defines the number of clusters you are using   
+rect.hclust(fit, k=6, border="red") # draw dendogram with red borders around the 6 clusters 
+
+# Find word association with top 10 words
+#wordAssocs <- findAssocs(dtm, c('pricing','customer','solutions','team','sales','need','knowledge','product','delivery'), 0.3)
+#wordAssocs <- findAssocs(dtm, c('knowledg','solut','project','need','product','consult','sale','team','custom','work','requir','success','implement'), 0.3)
+wordAssocs1 <- findAssocs(dtm, c('knowledg','share'), 0.3) # gap
+wordAssocs1
+
+wordAssocs2 <- findAssocs(dtm, c('specif','can','requir'), 0.3) # gap
+wordAssocs2
+
+wordAssocs3 <- findAssocs(dtm, c('offer','use','develop'), 0.3) # gap
+wordAssocs3
+
+wordAssocs4 <- findAssocs(dtm, c('solut','product','custom','new','sale','build'), 0.3) # gap
+wordAssocs4
+
+wordAssocs5 <- findAssocs(dtm, c('help','implement'), 0.3) # gap
+wordAssocs5
+
+wordAssocs6 <- findAssocs(dtm, c('consult','train','need','team','project'), 0.3) # gap
+wordAssocs6
+
+# Kmeans Clustering
+kfit <- kmeans(d, 7)   # Finding 5 reasons
+clusplot(as.matrix(d), kfit$cluster, color=T, shade=T, labels=2, lines=0,main = 'kmeans plotting with PCA')    
+
+head(kfit)
+
